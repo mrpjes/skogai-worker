@@ -1,0 +1,2 @@
+# skogai-worker
+SkogAI
