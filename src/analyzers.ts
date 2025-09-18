@@ -4,7 +4,7 @@ import { n } from "./lib/utils";
 type Opts = Record<string, any>;
 const def = <T>(v: T | null | undefined, d: T): T => (v ?? d);
 
-// Effektivt pris per m³sk: sortimentsmix → generellt pris → fallback (pris/volym)
+// Effektivt pris per m³sk: sortimentsmix → price_per_m3sk → fallback (pris/volym)
 function effPricePerM3(baseData: any, opt: Opts): number | null {
   const saw = n(opt?.price_sawlog);
   const pulp = n(opt?.price_pulp);
@@ -21,7 +21,7 @@ function effPricePerM3(baseData: any, opt: Opts): number | null {
   return (P && V && V>0) ? P/V : null;
 }
 
-// ===== Nyckeltal =====
+/* ------------------------- NYCKELTAL ------------------------- */
 function key_metrics({ baseData, options }: { baseData:any; options?: Opts }) {
   const area = n(baseData?.skogsmark_ha) ?? n(baseData?.areal_total_ha);
   const totV = n(baseData?.volym_total_m3sk);
@@ -33,16 +33,13 @@ function key_metrics({ baseData, options }: { baseData:any; options?: Opts }) {
   const pricePerHa = (pris && area) ? pris/area : null;
   const pricePerM3 = (pris && totV) ? pris/totV : null;
 
-  // tillväxt (m³/år) = bonitet × skogsmark
   const growth_m3 = (bonitet && n(baseData?.skogsmark_ha)) ? bonitet * n(baseData?.skogsmark_ha)! : null;
 
-  // tillväxtvärde (SEK/år) = tillväxt × virkespris (effektivt)
   const pEff = effPricePerM3(baseData, options || {});
   const growth_value = (growth_m3 && pEff) ? growth_m3*pEff : null;
 
   const cap_rate_pct = (growth_value && pris && pris>0) ? (100*growth_value/pris) : null;
 
-  // andel slutavverkningsbar skog
   const S1 = n(baseData?.huggningsklasser?.S1_m3sk) ?? 0;
   const S2 = n(baseData?.huggningsklasser?.S2_m3sk) ?? 0;
   const harvestNowPct = (totV && totV>0) ? (100 * ((S1??0)+(S2??0)) / totV) : null;
@@ -62,8 +59,9 @@ function key_metrics({ baseData, options }: { baseData:any; options?: Opts }) {
   };
 }
 
-// ===== Lönsamhet – 1) Initial avverkning (år 0–2) =====
-function initial_harvest({ baseData, options }: { baseData:any; options?: Opts }) {
+/* ------------- LÖNSAMHET: INITIAL AVVERKNING (skatt) ------------- */
+/** Beräknar skogsavdrag, skogskonto, aktuell skatt och utskjuten skatt. */
+function initial_harvest_taxed({ baseData, options }: { baseData:any; options?: Opts }) {
   const totV = n(baseData?.volym_total_m3sk);
   if (totV === null) return { ok:false, error:"saknar totalvolym" };
 
@@ -71,24 +69,112 @@ function initial_harvest({ baseData, options }: { baseData:any; options?: Opts }
   const S2 = n(baseData?.huggningsklasser?.S2_m3sk) ?? 0;
   const cut_m3 = (S1 ?? 0) + (S2 ?? 0);
 
-  const pEff = effPricePerM3(baseData, options || {}) ?? 0;
-  const gross = cut_m3 * pEff;
+  const pEff = effPricePerM3(baseData, options || {});
+  if (pEff == null) return { ok:false, error:"saknar virkespris (price_per_m3sk)" };
+
+  const gross = cut_m3 * pEff; // bruttointäkt (exkl moms)
 
   const ask = n(baseData?.pris_forvantning_sek);
-  const debtPayPct = (ask && ask>0) ? (100*gross/ask) : null;
+  // Skogsavdragsutrymme: antas 50% av köpeskillingen (skog+mark). (Förenkling.)
+  const skogsavdrag_utrymme = ask ? 0.5 * ask : 0;
+
+  const taxRate = def(n(options?.tax_rate_pct), 0.30); // decimal, t.ex. 0.30
+  const skogskontoShare = Math.max(0, Math.min(1, def(n(options?.skogskonto_share_pct), 0.60))); // 0..1
+
+  const skogsavdrag_nu = Math.min(gross, skogsavdrag_utrymme);
+  const taxable_before_account = Math.max(0, gross - skogsavdrag_nu);
+  const deposit = taxable_before_account * skogskontoShare;
+  const taxable_now = taxable_before_account - deposit;
+  const current_tax = taxable_now * taxRate;
+
+  // Utskjuten skatt på insatt belopp (när det tas ut)
+  const deferred_tax = deposit * taxRate;
+
+  const net_cash_now = gross - current_tax - deposit;
+  const skogskonto_net_after_future_tax = deposit - deferred_tax;
+
+  const remaining_deduction_room = skogsavdrag_utrymme - skogsavdrag_nu;
 
   return {
     ok:true,
-    antaganden: { price_per_m3sk_used: pEff },
+    antaganden: {
+      price_per_m3sk_used: pEff,
+      tax_rate_pct: taxRate*100,
+      skogskonto_share_pct: skogskontoShare*100,
+      skogsavdragsutrymme_sek: skogsavdrag_utrymme
+    },
     volym_avverkning_m3sk: cut_m3,
     bruttointakt_sek: gross,
-    skuldnedbetalning_andel_av_pris_pct: debtPayPct
+    skogsavdrag_anstalld_sek: skogsavdrag_nu,
+    beskattningsbar_fore_skogskonto_sek: taxable_before_account,
+    skogskonto_insattning_sek: deposit,
+    skatt_nu_sek: current_tax,
+    netto_idag_sek: net_cash_now,
+    utskjuten_skatt_skogskonto_sek: deferred_tax,
+    skogskonto_netto_efter_fr_skatt_sek: skogskonto_net_after_future_tax,
+    kvarvarande_skogsavdragsutrymme_sek: remaining_deduction_room,
+    // hur mycket av priset kan betalas ned (före/efter skatt)
+    skuldnedbetalning_andel_av_pris_brutto_pct: (ask && ask>0) ? (100*gross/ask) : null,
+    skuldnedbetalning_andel_av_pris_netto_pct: (ask && ask>0) ? (100*net_cash_now/ask) : null
   };
 }
 
-// ===== Lönsamhet – 2) Kassaflöde/DSCR (periodiskt utjämnat) =====
-// Förenklad: årlig intäkt ≈ (bonitet × ha × pris). DSCR utan amortering.
-// Visar även lånekapacitet = kassaflöde / ränta och DSCR mot priset som lån.
+/* ------------- LÖNSAMHET: RÄNTOR & LÅNEBÄRIGHET (100% default) ------------- */
+/** Antar låneandel (default 100%). Amorterar med netto_idag, räknar ränta och hur länge skogskontot räcker. */
+function loan_sustainability({ baseData, options, fromInitial }: { baseData:any; options?: Opts; fromInitial?: any }) {
+  const ask = n(baseData?.pris_forvantning_sek);
+  if (!ask) return { ok:false, error:"saknar pris_forvantning_sek" };
+
+  const loanShare = def(n(options?.loan_share_pct), 1.0); // decimal (1.0 = 100%)
+  const loan0 = ask * loanShare;
+
+  const netNow = n(fromInitial?.netto_idag_sek) ?? 0;
+  const debt = Math.max(0, loan0 - netNow);
+
+  const r = def(n(options?.interest_rate_pct), 0.05); // decimal
+  if (!r || r<=0) return { ok:false, error:"felaktig ränta" };
+
+  const annualInterest = debt * r;
+
+  const skogskontoNet = n(fromInitial?.skogskonto_netto_efter_fr_skatt_sek) ?? 0;
+  const yearsCovered = annualInterest>0 ? (skogskontoNet / annualInterest) : null;
+
+  return {
+    ok:true,
+    antaganden: { loan_share_pct: loanShare*100, interest_rate_pct: r*100 },
+    initial_lan_sek: loan0,
+    amortering_med_netto_sek: Math.min(loan0, netNow),
+    restskuld_sek: debt,
+    arlig_ranta_sek: annualInterest,
+    skogskonto_netto_efter_fr_skatt_sek: skogskontoNet,
+    ar_rante_tackt_av_skogskonto: yearsCovered
+  };
+}
+
+/* -------------------- RÄNTEFÖRDELNING (positiv) -------------------- */
+function interest_distribution({ baseData, options, fromLoan }: { baseData:any; options?: Opts; fromLoan?: any }) {
+  const ask = n(baseData?.pris_forvantning_sek);
+  const debt = n(fromLoan?.restskuld_sek);
+  if (ask == null || debt == null) return { ok:false, error:"saknar pris/restskuld" };
+
+  const capitalBase = Math.max(0, ask - debt);
+  const rate = def(n(options?.interest_distribution_rate_pct), 0.0862); // t.ex. 8.62% (2024) – decimal
+  const amount = capitalBase * rate;
+
+  // Besparingsindikator: skillnad mellan näringsskatt (effektiv) och kapitalskatt 30%
+  const effBiz = def(n(options?.business_tax_effective_pct), 0.45); // grovt antagande
+  const taxSaving = amount * Math.max(0, (effBiz - 0.30));
+
+  return {
+    ok:true,
+    kapitalunderlag_sek: capitalBase,
+    rantefordelningsranta_pct: rate*100,
+    rantefordelningsbelopp_sek: amount,
+    antagen_skattebesparing_vs_naring_sek: taxSaving
+  };
+}
+
+/* ------------- LÖNSAMHET (LEAN): KASSA/DSCR utan amort ------------- */
 function forward_cashflow_and_debt({ baseData, options }: { baseData:any; options?: Opts }) {
   const area = n(baseData?.skogsmark_ha) ?? n(baseData?.areal_total_ha);
   const bonitet = n(baseData?.bonitet);
@@ -122,7 +208,7 @@ function forward_cashflow_and_debt({ baseData, options }: { baseData:any; option
   };
 }
 
-// ===== Sammanfattning i sektioner (visas i UI) =====
+/* ----------------------- SUMMARY (sektioner) ----------------------- */
 function summary_pack({ baseData, options }: { baseData:any; options?: Opts }) {
   // Grunddata
   const grunddata = {
@@ -145,8 +231,14 @@ function summary_pack({ baseData, options }: { baseData:any; options?: Opts }) {
   const km = key_metrics({ baseData, options });
   const nyckeltal = km?.nyckeltal ?? {};
 
-  // Lönsamhet
-  const init = initial_harvest({ baseData, options });
+  // Steg: initial skattelogik
+  const initTax = initial_harvest_taxed({ baseData, options });
+  // Steg: lån/skogskonto-hållbarhet (beror på initTax)
+  const loan = loan_sustainability({ baseData, options, fromInitial: initTax });
+  // Steg: räntefördelning (beror på restskuld)
+  const idist = interest_distribution({ baseData, options, fromLoan: loan });
+
+  // Lean DSCR (utjämnat kassaflöde)
   const fwd  = forward_cashflow_and_debt({ baseData, options });
 
   return {
@@ -154,13 +246,15 @@ function summary_pack({ baseData, options }: { baseData:any; options?: Opts }) {
     grunddata,
     nyckeltal,
     lonsamhet: {
-      initial_avverkning: init,
+      initial_avverkning: initTax,
+      lan_och_skogskonto: loan,
+      rantefordelning: idist,
       framot_kassaflode_och_skuldbarande: fwd
     }
   };
 }
 
-// (valfritt) Legacy-exempel kvar om du använder dem via UI
+/* -------------------- (valfria legacy-analyser) -------------------- */
 function price_metrics({ baseData }: any) {
   const A = n(baseData?.skogsmark_ha) ?? n(baseData?.areal_total_ha);
   const V = n(baseData?.volym_total_m3sk);
@@ -185,13 +279,14 @@ function risk({ baseData, options }: any) {
   return { ok:true, score, level, vPerHa };
 }
 
-// ===== Export =====
+/* --------------------------- Export --------------------------- */
 export const ANALYZERS = {
   key_metrics,
-  initial_harvest,
+  initial_harvest_taxed,
+  loan_sustainability,
+  interest_distribution,
   forward_cashflow_and_debt,
   summary_pack,
-  // legacy (valfritt i UI)
   price_metrics,
   risk
 };
