@@ -7,7 +7,7 @@ export interface Env {
   skogaiR2bucket: R2Bucket;
   OPENAI_API_KEY: string;
   ACCESS_TOKEN?: string;
-  ASSETS: Fetcher;              // <- från wrangler [assets] binding = "ASSETS"
+  ASSETS: Fetcher; // från wrangler.toml [assets] binding = "ASSETS"
 }
 
 export default {
@@ -28,18 +28,24 @@ export default {
     // Health
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
 
-    // Token (om satt)
+    // Valfri access-token
     if (env.ACCESS_TOKEN) {
       const t = req.headers.get("x-access-token");
       if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
     }
 
-    // -------- Static: allt under / (fallback till public/index.html)
-    if (req.method === "GET" && (url.pathname === "/" || !url.pathname.startsWith("/upload") && !url.pathname.startsWith("/process") && !url.pathname.startsWith("/get/"))) {
+    // Statiska filer (UI) från /public
+    if (
+      req.method === "GET" &&
+      (url.pathname === "/" ||
+        (!url.pathname.startsWith("/upload") &&
+         !url.pathname.startsWith("/process") &&
+         !url.pathname.startsWith("/get/")))
+    ) {
       return env.ASSETS.fetch(req);
     }
 
-    // -------- Upload (body = application/pdf)
+    // === Upload ===
     if (url.pathname === "/upload" && req.method === "POST") {
       const ct = req.headers.get("content-type") || "";
       if (!ct.startsWith("application/pdf")) return j({ ok: false, error: "Skicka application/pdf" }, 400);
@@ -49,7 +55,7 @@ export default {
       return j({ ok: true, key });
     }
 
-    // -------- Process
+    // === Process ===
     if (url.pathname === "/process" && req.method === "POST") {
       try {
         const body = await req.json().catch(() => ({}));
@@ -67,29 +73,26 @@ export default {
         if (!obj) return j({ ok: false, error: "File not found in R2", key }, 404);
         const ab = await obj.arrayBuffer();
 
-        // Bygg payload
+        // Bygg input till modellen
         let userPayload: string;
         let sliceInfo: { input_size_bytes: number; slice_bytes_used: number; partial: boolean } | null = null;
 
         if (textFromClient) {
-          userPayload = `Detta är text extraherad ur ett svenskt skogsprospekt (PDF).\n\n${textFromClient}`;
+          userPayload = "Detta är text extraherad ur ett svenskt skogsprospekt (PDF).\n\n" + textFromClient;
         } else {
           const u8 = new Uint8Array(ab).slice(0, Math.min(ab.byteLength, SLICE_BYTES));
           sliceInfo = { input_size_bytes: ab.byteLength, slice_bytes_used: u8.byteLength, partial: ab.byteLength > u8.byteLength };
           const b64 = base64FromBytes(u8);
-          userPayload = `Detta är en base64-slice av ett skogsprospekt (PDF). Extrahera enligt schema.\n\nPDF_base64:\n${b64}`;
+          userPayload = "Detta är en base64-slice av ett skogsprospekt (PDF). Extrahera enligt schema.\n\nPDF_base64:\n" + b64;
         }
 
         const schemaStr = JSON.stringify(skogsSchema());
-        const prompt = `SYSTEM:
-Du är en extraktor. Returnera ENBART giltig JSON som matchar följande JSON Schema.
-Sätt null där uppgift saknas. Inga förklaringar, inga markdown-block, inga extra fält.
-
-JSON_SCHEMA:
-${schemaStr}
-
-USER:
-${userPayload}`;
+        const prompt =
+          "SYSTEM:\n" +
+          "Du är en extraktor. Returnera ENBART giltig JSON som matchar följande JSON Schema.\n" +
+          "Sätt null där uppgift saknas. Inga förklaringar, inga markdown-block, inga extra fält.\n\n" +
+          "JSON_SCHEMA:\n" + schemaStr + "\n\n" +
+          "USER:\n" + userPayload;
 
         const r = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
@@ -102,7 +105,7 @@ ${userPayload}`;
 
         const openai = await r.json();
 
-        // Plocka ut JSON
+        // Plocka ut JSON från svaret
         let extractedText: string | null =
           openai?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text ??
           openai?.output_text ??
@@ -125,7 +128,9 @@ ${userPayload}`;
         const ctx = { baseData, options };
         for (const name of analyses) {
           try {
-            results[name] = ANALYZERS[name] ? (ANALYZERS as any)[name](ctx) : { ok: false, error: "unknown_analyzer" };
+            results[name] = (ANALYZERS as any)[name]
+              ? (ANALYZERS as any)[name](ctx)
+              : { ok: false, error: "unknown_analyzer" };
           } catch (e: any) {
             results[name] = { ok: false, error: e?.message ?? "analyzer_error" };
           }
@@ -145,7 +150,7 @@ ${userPayload}`;
       }
     }
 
-    // -------- Hämta PDF från R2
+    // === Hämta PDF från R2 ===
     if (url.pathname.startsWith("/get/")) {
       const k = decodeURIComponent(url.pathname.replace("/get/", ""));
       const o = await env.skogaiR2bucket.get(k);
@@ -155,7 +160,6 @@ ${userPayload}`;
       });
     }
 
-    // Default
     return new Response(JSON.stringify({ ok: true, msg: "UI + API running" }), {
       headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
     });
