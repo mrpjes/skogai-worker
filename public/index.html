@@ -57,10 +57,12 @@
 <fieldset>
   <legend>2) Välj analyser</legend>
   <div class="row">
-    <label><input type="checkbox" class="an" value="summary_pack" checked> Sammanfattning (sektioner)</label>
+    <label><input type="checkbox" class="an" value="summary_pack" checked> Sammanfattning</label>
     <label><input type="checkbox" class="an" value="key_metrics" checked> Nyckeltal</label>
-    <label><input type="checkbox" class="an" value="initial_harvest" checked> Avverkning nu</label>
-    <label><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked> Kassaflöde & DSCR</label>
+    <label><input type="checkbox" class="an" value="initial_harvest_taxed" checked> Initial avverkning (skatt)</label>
+    <label><input type="checkbox" class="an" value="loan_sustainability" checked> Lån & skogskonto</label>
+    <label><input type="checkbox" class="an" value="interest_distribution" checked> Räntefördelning</label>
+    <label><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked> Kassaflöde & DSCR (lean)</label>
   </div>
   <div class="row" style="margin-top:8px">
     <div>Slice bytes: <input type="number" id="slice" min="120000" max="800000" step="10000" value="300000"></div>
@@ -75,18 +77,32 @@
   <div style="font-weight:600;margin-bottom:6px">Virkespris</div>
   <div class="row">
     <label>Pris (SEK/m³sk): <input type="number" id="price_per_m3sk" step="1" value="350"></label>
-    <span class="pill">Tip: sätt konservativt för att implicit ta höjd för kostnader</span>
+    <span class="pill">Sätt konservativt (exkl. moms, implicit kostnader)</span>
   </div>
 
-  <div style="font-weight:600;margin:10px 0 6px">Ränta</div>
+  <div style="font-weight:600;margin:10px 0 6px">Skatt</div>
   <div class="row">
+    <label>Skattesats %: <input type="number" id="tax_rate_pct" step="0.1" value="30"></label>
+    <label>Skogskontoandel %: <input type="number" id="skogskonto_share_pct" step="1" value="60"></label>
+  </div>
+
+  <div style="font-weight:600;margin:10px 0 6px">Finans</div>
+  <div class="row">
+    <label>Låneandel % (av pris): <input type="number" id="loan_share_pct" step="1" value="100"></label>
     <label>Ränta %: <input type="number" id="interest_rate_pct" step="0.01" value="5"></label>
     <label>Testa lån (SEK): <input type="number" id="loan_amount_sek" step="1000"></label>
   </div>
 
+  <div style="font-weight:600;margin:10px 0 6px">Räntefördelning</div>
+  <div class="row">
+    <label>Räntefördelningsränta %: <input type="number" id="interest_distribution_rate_pct" step="0.01" value="8.62"></label>
+    <label>Effektiv näringsskatt %: <input type="number" id="business_tax_effective_pct" step="0.1" value="45"></label>
+  </div>
+
   <div style="margin-top:10px">
     <button id="btnProcess">Kör extraktion + analyser</button>
-    <button id="btnExport" disabled>Exportera JSON</button>
+    <button id="btnExportJSON" disabled>Exportera JSON</button>
+    <button id="btnExportCSV" disabled>Exportera CSV</button>
   </div>
 </fieldset>
 
@@ -110,8 +126,7 @@
       xhr.setRequestHeader('Content-Type', 'application/pdf');
       xhr.upload.onprogress = (e) => setUploadProgress(e.lengthComputable ? (e.loaded/e.total)*100 : 50);
       xhr.onload = () => {
-        try {
-          const json = JSON.parse(xhr.responseText || '{}');
+        try { const json = JSON.parse(xhr.responseText || '{}');
           if (xhr.status>=200 && xhr.status<300 && json.ok) resolve(json);
           else reject(json);
         } catch(e){ reject(e); }
@@ -164,16 +179,35 @@
     }
   }
 
-  function getNumber(id, fallback=null){
-    const v = Number(document.getElementById(id).value);
-    return Number.isFinite(v) ? v : fallback;
+  function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
+  function pctToDec(p){ return (p==null) ? null : (p/100); }
+  function decToPct(d){ return (d==null) ? null : (d*100); }
+
+  function kv(k, v){
+    const div = document.createElement('div'); div.className='kv';
+    const a = document.createElement('span'); a.textContent = k;
+    const b = document.createElement('span'); b.textContent = (v===null||v===undefined||v==="") ? "–" : formatNumber(v);
+    div.appendChild(a); div.appendChild(b); return div;
+  }
+  function card(title, kvs, extraObjSection){
+    const wrap = document.createElement('div'); wrap.className='card';
+    const h = document.createElement('h4'); h.textContent = title; wrap.appendChild(h);
+    kvs.forEach(kvEl => wrap.appendChild(kvEl));
+    if (extraObjSection) {
+      const h2 = document.createElement('h4'); h2.textContent = extraObjSection.title; wrap.appendChild(h2);
+      const pre = document.createElement('pre'); pre.textContent = JSON.stringify(extraObjSection.obj,null,2); wrap.appendChild(pre);
+    }
+    return wrap;
+  }
+  function formatNumber(v){
+    if (typeof v !== 'number' || !isFinite(v)) return v;
+    if (Math.abs(v) >= 1_000_000) return (v).toFixed(0);
+    if (Math.abs(v) >= 1_000) return (v).toFixed(0);
+    return (v).toFixed(2);
   }
 
   function renderCards(resp){
-    const c = document.getElementById('cards');
-    c.innerHTML = "";
-
-    // Hämta summary_pack om det finns, annars visa data + analyses separat
+    const c = document.getElementById('cards'); c.innerHTML = "";
     const sp = resp?.analyses?.summary_pack;
     const data = resp?.data || {};
     const km  = resp?.analyses?.key_metrics?.nyckeltal;
@@ -216,43 +250,48 @@
       kv("Andel slutavverkningsbar (%)", nk.andel_slutavverkningsbar_pct)
     ]));
 
-    // Lönsamhet
+    // Lönsamhet – detaljerade block från summary_pack
     const ln = sp?.lonsamhet ?? {};
-    const init = ln.initial_avverkning ?? resp?.analyses?.initial_harvest;
-    const fwd  = ln.framot_kassaflode_och_skuldbarande ?? resp?.analyses?.forward_cashflow_and_debt;
+    const init = ln.initial_avverkning;
+    const loan = ln.lan_och_skogskonto;
+    const idist = ln.rantefordelning;
+    const fwd  = ln.framot_kassaflode_och_skuldbarande;
 
-    c.appendChild(card("Lönsamhet – Initial avverkning", [
+    c.appendChild(card("Lönsamhet – Initial avverkning (skatt)", [
       kv("Volym S1+S2 (m³sk)", init?.volym_avverkning_m3sk),
       kv("Bruttointäkt (SEK)", init?.bruttointakt_sek),
-      kv("Skuldnedbetalning (% av pris)", init?.skuldnedbetalning_andel_av_pris_pct)
-    ], null));
+      kv("Skogsavdrag använt (SEK)", init?.skogsavdrag_anstalld_sek),
+      kv("Skogskonto insättning (SEK)", init?.skogskonto_insattning_sek),
+      kv("Skatt nu (SEK)", init?.skatt_nu_sek),
+      kv("Netto idag (SEK)", init?.netto_idag_sek),
+      kv("Utskjuten skatt skogskonto (SEK)", init?.utskjuten_skatt_skogskonto_sek),
+      kv("Skogskonto netto (efter framtida skatt)", init?.skogskonto_netto_efter_fr_skatt_sek),
+      kv("Skuldnedbetalning (% av pris) – netto", init?.skuldnedbetalning_andel_av_pris_netto_pct)
+    ]));
 
-    c.appendChild(card("Lönsamhet – Kassaflöde & DSCR", [
+    c.appendChild(card("Lön & Skogskonto – bärighet", [
+      kv("Initialt lån (SEK)", loan?.initial_lan_sek),
+      kv("Amortering med netto (SEK)", loan?.amortering_med_netto_sek),
+      kv("Restskuld (SEK)", loan?.restskuld_sek),
+      kv("Årlig ränta (SEK)", loan?.arlig_ranta_sek),
+      kv("Skogskonto netto", loan?.skogskonto_netto_efter_fr_skatt_sek),
+      kv("År räntor täcks av skogskonto", loan?.ar_rante_tackt_av_skogskonto)
+    ]));
+
+    c.appendChild(card("Räntefördelning (positiv)", [
+      kv("Kapitalunderlag (SEK)", idist?.kapitalunderlag_sek),
+      kv("Räntefördelningsränta (%)", idist?.rantefordelningsranta_pct),
+      kv("Räntefördelningsbelopp (SEK)", idist?.rantefordelningsbelopp_sek),
+      kv("Skattebesparing (indikativ, SEK)", idist?.antagen_skattebesparing_vs_naring_sek)
+    ]));
+
+    c.appendChild(card("Kassaflöde & DSCR (lean)", [
       kv("Årlig tillväxt (m³sk)", fwd?.arlig_tillvaxt_m3sk),
       kv("Årlig intäkt (SEK)", fwd?.arlig_intakt_sek),
       kv("Lånekapacitet (SEK)", fwd?.lanekapacitet_sek),
       kv("DSCR vs. givet lån", fwd?.dscr_vs_given_loan),
       kv("DSCR vs. prisförväntan", fwd?.dscr_vs_ask_price)
     ]));
-  }
-
-  function kv(k, v){
-    const div = document.createElement('div');
-    div.className = 'kv';
-    const a = document.createElement('span'); a.textContent = k;
-    const b = document.createElement('span'); b.textContent = (v===null||v===undefined||v==="") ? "–" : String(Math.roundNumber ? Math.roundNumber(v) : v);
-    div.appendChild(a); div.appendChild(b);
-    return div;
-  }
-  function card(title, kvs, extraObjSection){
-    const wrap = document.createElement('div'); wrap.className='card';
-    const h = document.createElement('h4'); h.textContent = title; wrap.appendChild(h);
-    kvs.forEach(kvEl => wrap.appendChild(kvEl));
-    if (extraObjSection) {
-      const h2 = document.createElement('h4'); h2.textContent = extraObjSection.title; wrap.appendChild(h2);
-      const pre = document.createElement('pre'); pre.textContent = JSON.stringify(extraObjSection.obj,null,2); wrap.appendChild(pre);
-    }
-    return wrap;
   }
 
   async function onProcess(){
@@ -263,9 +302,14 @@
     const text = (window.__EXTRACTED_TEXT__ && window.__EXTRACTED_TEXT__.trim().length>0) ? window.__EXTRACTED_TEXT__ : null;
 
     const options = {
-      price_per_m3sk: Number(document.getElementById('price_per_m3sk').value) || null,
-      interest_rate_pct: (Number(document.getElementById('interest_rate_pct').value)||0)/100,
-      loan_amount_sek: Number(document.getElementById('loan_amount_sek').value) || null
+      price_per_m3sk: getNum('price_per_m3sk') ?? null,
+      tax_rate_pct: pctToDec(getNum('tax_rate_pct')) ?? 0.30,
+      skogskonto_share_pct: pctToDec(getNum('skogskonto_share_pct')) ?? 0.60,
+      loan_share_pct: pctToDec(getNum('loan_share_pct')) ?? 1.0,
+      interest_rate_pct: pctToDec(getNum('interest_rate_pct')) ?? 0.05,
+      interest_distribution_rate_pct: pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
+      business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45,
+      loan_amount_sek: getNum('loan_amount_sek') ?? null
     };
 
     const r=await fetch('process',{
@@ -277,33 +321,98 @@
     __lastResponse__ = json;
     raw(json);
     renderCards(json);
-    document.getElementById('btnExport').disabled = false;
+    document.getElementById('btnExportJSON').disabled = false;
+    document.getElementById('btnExportCSV').disabled = false;
   }
 
-  function onExport(){
+  function onExportJSON(){
     if (!__lastResponse__) return;
     const blob = new Blob([JSON.stringify(__lastResponse__, null, 2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a  = document.createElement('a');
-    a.href = url;
-    a.download = 'skogai-resultat.json';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = 'skogai-resultat.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  function flattenForCSV(resp){
+    const sp = resp?.analyses?.summary_pack;
+    const gd = sp?.grunddata ?? resp?.data ?? {};
+    const nk = sp?.nyckeltal ?? resp?.analyses?.key_metrics?.nyckeltal ?? {};
+    const ln = sp?.lonsamhet ?? {};
+    const init = ln.initial_avverkning ?? {};
+    const loan = ln.lan_och_skogskonto ?? {};
+    const idst = ln.rantefordelning ?? {};
+    const fwd  = ln.framot_kassaflode_och_skuldbarande ?? {};
+
+    const row = {
+      fastighetsbeteckning: gd.fastighetsbeteckning ?? gd.fastighet ?? "",
+      kommun: gd.kommun ?? "",
+      areal_total_ha: gd.areal_total_ha ?? "",
+      skogsmark_ha: gd.skogsmark_ha ?? "",
+      volym_total_m3sk: gd.volym_total_m3sk ?? "",
+      volym_per_ha_m3sk: gd.volym_per_ha_m3sk ?? "",
+      bonitet: gd.bonitet ?? "",
+      pris_forvantning_sek: nk.pris_forvantning_sek ?? "",
+      taxeringsvarde_sek: nk.taxeringsvarde_sek ?? "",
+      pris_per_hektar: nk.pris_per_hektar ?? "",
+      pris_per_m3sk: nk.pris_per_m3sk ?? "",
+      tillvaxt_m3sk_per_ar: nk.tillvaxt_m3sk_per_ar ?? "",
+      tillvaxtvarde_sek_per_ar: nk.tillvaxtvarde_sek_per_ar ?? "",
+      kapitaliseringsranta_pct: nk.kapitaliseringsranta_pct ?? "",
+      andel_slutavverkningsbar_pct: nk.andel_slutavverkningsbar_pct ?? "",
+      init_volym_m3sk: init.volym_avverkning_m3sk ?? "",
+      init_brutto_sek: init.bruttointakt_sek ?? "",
+      init_skogsavdrag_sek: init.skogsavdrag_anstalld_sek ?? "",
+      init_skogskonto_insattning_sek: init.skogskonto_insattning_sek ?? "",
+      init_skatt_nu_sek: init.skatt_nu_sek ?? "",
+      init_netto_idag_sek: init.netto_idag_sek ?? "",
+      init_utskjuten_skatt_sek: init.utskjuten_skatt_skogskonto_sek ?? "",
+      init_skogskonto_netto_efter_fr_skatt_sek: init.skogskonto_netto_efter_fr_skatt_sek ?? "",
+      init_skuldnedbetalning_netto_pct: init.skuldnedbetalning_andel_av_pris_netto_pct ?? "",
+      loan_initial_sek: loan.initial_lan_sek ?? "",
+      loan_amortering_netto_sek: loan.amortering_med_netto_sek ?? "",
+      loan_restskuld_sek: loan.restskuld_sek ?? "",
+      loan_arlig_ranta_sek: loan.arlig_ranta_sek ?? "",
+      loan_ar_rante_tackt_av_skogskonto: loan.ar_rante_tackt_av_skogskonto ?? "",
+      idist_kapitalunderlag_sek: idst.kapitalunderlag_sek ?? "",
+      idist_ranta_pct: idst.rantefordelningsranta_pct ?? "",
+      idist_belopp_sek: idst.rantefordelningsbelopp_sek ?? "",
+      idist_skattebesparing_sek: idst.antagen_skattebesparing_vs_naring_sek ?? "",
+      fwd_arlig_tillvaxt_m3sk: fwd.arlig_tillvaxt_m3sk ?? "",
+      fwd_arlig_intakt_sek: fwd.arlig_intakt_sek ?? "",
+      fwd_lanekapacitet_sek: fwd.lanekapacitet_sek ?? "",
+      fwd_dscr_vs_loan: fwd.dscr_vs_given_loan ?? "",
+      fwd_dscr_vs_ask: fwd.dscr_vs_ask_price ?? ""
+    };
+    return [row];
+  }
+
+  function toCSV(rows){
+    if (!rows.length) return "";
+    const headers = Object.keys(rows[0]);
+    const esc = (v) => {
+      if (v === null || v === undefined) return "";
+      const s = String(v).replace(/"/g,'""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    };
+    const head = headers.join(",");
+    const body = rows.map(r => headers.map(h => esc(r[h])).join(",")).join("\n");
+    return head + "\n" + body;
   }
 
   document.getElementById('btnUpload').addEventListener('click', onUpload);
   document.getElementById('btnProcess').addEventListener('click', onProcess);
-  document.getElementById('btnExport').addEventListener('click', onExport);
-
-  // litet helpers
-  Math.roundNumber = (v) => {
-    if (typeof v !== 'number' || !isFinite(v)) return v;
-    if (Math.abs(v) >= 1000000) return v.toFixed(0);
-    if (Math.abs(v) >= 1000) return v.toFixed(0);
-    return v.toFixed(2);
-  }
+  document.getElementById('btnExportJSON').addEventListener('click', onExportJSON);
+  document.getElementById('btnExportCSV').addEventListener('click', () => {
+    if (!__lastResponse__) return;
+    const rows = flattenForCSV(__lastResponse__);
+    const csv = toCSV(rows);
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a  = document.createElement('a');
+    a.href = url; a.download = 'skogai-resultat.csv';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  });
 </script>
 </body>
 </html>
