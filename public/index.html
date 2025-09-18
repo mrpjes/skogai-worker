@@ -3,27 +3,22 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>SkogAI – PDF → Grunddata + Analyser</title>
+  <title>SkogAI – PDF → Nyckeltal & Kassaflöde</title>
   <style>
-    body{font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;max-width:980px;margin:24px auto;padding:0 12px}
+    body{font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 12px}
     h1{margin:0 0 12px}
     fieldset{border:1px solid #ddd;padding:12px 16px;margin:16px 0;border-radius:10px}
-    legend{font-weight:600}
-    label{margin-right:14px;display:inline-flex;align-items:center;gap:6px}
-    input[type=number]{width:140px}
+    legend{font-weight:700}
+    label{display:inline-flex;gap:6px;align-items:center;margin:6px 14px 6px 0}
+    input[type=number]{width:120px}
     button{padding:10px 14px;border-radius:8px;border:1px solid #bbb;cursor:pointer;background:#fff}
-    button:disabled{opacity:.6;cursor:not-allowed}
     #out{white-space:pre-wrap;background:#fbfbfb;border:1px solid #eee;padding:12px;border-radius:8px}
-    .small{color:#666;font-size:13px}
-    .bar{height:10px;background:#eee;border-radius:8px;overflow:hidden}
+    .row{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+    .bar{height:10px;background:#eee;border-radius:8px;overflow:hidden;margin-top:4px}
     .bar>div{height:100%;width:0%}
     #upBar{background:#4caf50} #exBar{background:#2196f3}
-    code{background:#f5f5f5;padding:2px 6px;border-radius:6px}
-    .row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
-    .row > div{display:flex;gap:8px;align-items:center}
+    .small{color:#666;font-size:13px}
   </style>
-
-  <!-- Stabil PDF.js för iOS Safari -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.min.js"></script>
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -31,180 +26,212 @@
   </script>
 </head>
 <body>
-  <h1>SkogAI – PDF → Grunddata + Analyser</h1>
+<h1>SkogAI – PDF → Grunddata, Nyckeltal & Lönsamhet</h1>
 
-  <!-- 1) Uppladdning -->
-  <fieldset>
-    <legend>1) Ladda upp PDF</legend>
-    <div class="row">
-      <input type="file" id="pdf" accept="application/pdf">
-      <button id="btnUpload">Ladda upp</button>
-      <div>Nyckel: <code id="key"></code></div>
+<fieldset>
+  <legend>1) Ladda upp PDF</legend>
+  <div class="row">
+    <input type="file" id="pdf" accept="application/pdf">
+    <button id="btnUpload">Ladda upp</button>
+    <div>Nyckel: <code id="key"></code></div>
+  </div>
+  <div style="margin-top:8px">
+    <div>Uppladdning: <span id="upPct">0%</span></div>
+    <div class="bar"><div id="upBar"></div></div>
+  </div>
+  <div style="margin-top:8px">
+    <div>Extrahering (PDF.js): <span id="exPct">0%</span></div>
+    <div class="bar"><div id="exBar"></div></div>
+  </div>
+  <div class="small" style="margin-top:8px">
+    Tips: PDF-text extraheras lokalt med PDF.js. Om det fallerar används binär slice.
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>2) Välj analyser</legend>
+  <div class="row">
+    <label><input type="checkbox" class="an" value="summary_pack" checked> Sammanfattning (sektioner)</label>
+    <label><input type="checkbox" class="an" value="key_metrics" checked> Nyckeltal</label>
+    <label><input type="checkbox" class="an" value="initial_harvest" checked> Avverkning nu</label>
+    <label><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked> Kassaflöde & Skuld</label>
+
+    <!-- behåll även dina äldre om du vill -->
+    <label><input type="checkbox" class="an" value="price_metrics"> Pris-metrik (legacy)</label>
+    <label><input type="checkbox" class="an" value="risk"> Risk (v/ha)</label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div>Slice bytes: <input type="number" id="slice" min="120000" max="800000" step="10000" value="300000"></div>
+    <div>Modell:
+      <select id="model"><option value="gpt-4.1-mini" selected>gpt-4.1-mini</option></select>
     </div>
-    <div class="small" style="margin-top:6px">
-      Tips: Systemet försöker först extrahera text lokalt med PDF.js. Om det misslyckas används en binär "slice" som fallback.
-    </div>
+  </div>
+</fieldset>
 
-    <div style="margin:12px 0">
-      <div>Uppladdning: <span id="upPct">0%</span></div>
-      <div class="bar"><div id="upBar"></div></div>
-    </div>
+<fieldset>
+  <legend>3) Antaganden (pris, kostnader, skatt, finans)</legend>
+  <div style="font-weight:600;margin-bottom:6px">Virkespris</div>
+  <div class="row">
+    <label>Pris (SEK/m³sk): <input type="number" id="price_per_m3sk" step="1" value="350"></label>
+    <label>Sågtimmer (SEK): <input type="number" id="price_sawlog" step="1"></label>
+    <label>Massaved (SEK): <input type="number" id="price_pulp" step="1"></label>
+    <label>Andel sågtimmer %: <input type="number" id="share_sawlog_pct" step="1"></label>
+    <label>Andel massaved %: <input type="number" id="share_pulp_pct" step="1"></label>
+  </div>
 
-    <div style="margin:12px 0">
-      <div>Extrahering (PDF.js): <span id="exPct">0%</span></div>
-      <div class="bar"><div id="exBar"></div></div>
-    </div>
-  </fieldset>
+  <div style="font-weight:600;margin:10px 0 6px">Rörliga kostnader</div>
+  <div class="row">
+    <label>Avverkning (SEK/m³): <input type="number" id="harvest_cost_per_m3" step="1" value="120"></label>
+    <label>Transport (SEK/m³): <input type="number" id="transport_cost_per_m3" step="1" value="60"></label>
+  </div>
 
-  <!-- 2) Analyser + modell -->
-  <fieldset>
-    <legend>2) Välj analyser & parametrar</legend>
+  <div style="font-weight:600;margin:10px 0 6px">Skogsvård (vid slutavverkning)</div>
+  <div class="row">
+    <label>Plantering (SEK/ha): <input type="number" id="replant_cost_per_ha" step="1" value="3000"></label>
+    <label>Markberedning (SEK/ha): <input type="number" id="site_prep_cost_per_ha" step="1" value="2000"></label>
+    <label>Röjning (SEK/ha): <input type="number" id="precommercial_thin_per_ha" step="1" value="1000"></label>
+    <label>Årlig förvaltning (SEK/ha): <input type="number" id="mgmt_cost_per_ha" step="1" value="200"></label>
+  </div>
 
-    <div style="margin-bottom:8px;font-weight:600">Analyser</div>
-    <div class="row" style="margin-bottom:8px">
-      <label><input type="checkbox" class="an" value="price_metrics" checked> Pris-metrik</label>
-      <label><input type="checkbox" class="an" value="risk" checked> Risk</label>
-      <label><input type="checkbox" class="an" value="growth_analysis" checked> Årlig tillväxt</label>
-      <label><input type="checkbox" class="an" value="harvest_plan" checked> Avverkningar</label>
-      <label><input type="checkbox" class="an" value="cashflow_loan" checked> Kassaflöde & lån</label>
-    </div>
+  <div style="font-weight:600;margin:10px 0 6px">Skatt</div>
+  <div class="row">
+    <label>Skattesats eff. %: <input type="number" id="tax_rate_pct" step="0.1" value="22"></label>
+    <label>Skogsavdrag % av intäkt: <input type="number" id="skogsavdrag_pct" step="0.1" value="0"></label>
+  </div>
 
-    <div style="margin:8px 0;font-weight:600">Parametrar</div>
-    <div class="row">
-      <div>Slice-bytes (fallback 120k–800k):
-        <input type="number" id="slice" min="120000" max="800000" step="10000" value="300000">
-      </div>
-      <div>Modell:
-        <select id="model">
-          <option value="gpt-4.1-mini" selected>gpt-4.1-mini</option>
-        </select>
-      </div>
-      <div>Ränta (kassaflöde/lån):
-        <input type="number" id="rate" step="0.001" value="0.05">
-      </div>
-      <div>Amortering (år):
-        <input type="number" id="amort" step="1" value="30">
-      </div>
-    </div>
+  <div style="font-weight:600;margin:10px 0 6px">Finans & plan</div>
+  <div class="row">
+    <label>Ränta %: <input type="number" id="interest_rate_pct" step="0.01" value="5"></label>
+    <label>Amortering (år): <input type="number" id="amort_years" step="1" value="25"></label>
+    <label>Mål-DSCR: <input type="number" id="target_DSCR" step="0.01" value="1.25"></label>
+    <label>Diskonteringsränta %: <input type="number" id="discount_rate_pct" step="0.01" value="6"></label>
+    <label>Avverka nu % av volym: <input type="number" id="harvest_now_pct" step="1" value="20"></label>
+    <label>Prognosår: <input type="number" id="years" step="1" value="5"></label>
+  </div>
 
-    <div style="margin-top:10px">
-      <button id="btnProcess">Kör extraktion + analyser</button>
-    </div>
-  </fieldset>
+  <div style="margin-top:10px">
+    <button id="btnProcess">Kör extraktion + analyser</button>
+  </div>
+</fieldset>
 
-  <h3>Resultat</h3>
-  <pre id="out">{ tips: "1) Ladda upp, 2) Kör extraktion. PDF-text tas lokalt (PDF.js), annars binär slice." }</pre>
+<h3>Resultat</h3>
+<pre id="out">{ tips: "1) Ladda upp, 2) Välj analyser & antaganden, 3) Kör." }</pre>
 
-  <script>
-    function out(o){
-      document.getElementById('out').textContent =
-        typeof o==='string' ? o : JSON.stringify(o,null,2);
-    }
-    function setUploadProgress(p){
-      document.getElementById('upPct').textContent = Math.round(p)+'%';
-      document.getElementById('upBar').style.width = p+'%';
-    }
-    function setExtractProgress(p){
-      document.getElementById('exPct').textContent = Math.round(p)+'%';
-      document.getElementById('exBar').style.width = p+'%';
-    }
+<script>
+  const out = (o) => document.getElementById('out').textContent = typeof o==='string' ? o : JSON.stringify(o,null,2);
+  const setUploadProgress  = p => { document.getElementById('upPct').textContent=Math.round(p)+'%'; document.getElementById('upBar').style.width=p+'%'; };
+  const setExtractProgress = p => { document.getElementById('exPct').textContent=Math.round(p)+'%'; document.getElementById('exBar').style.width=p+'%'; };
 
-    function uploadToWorkerWithProgress(file){
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'upload', true);
-        xhr.setRequestHeader('Content-Type', 'application/pdf');
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setUploadProgress((e.loaded/e.total)*100);
-          else setUploadProgress(50);
-        };
-        xhr.onload = () => {
-          try {
-            const json = JSON.parse(xhr.responseText || '{}');
-            if (xhr.status>=200 && xhr.status<300 && json.ok) resolve(json);
-            else reject(json);
-          } catch(e){ reject(e); }
-        };
-        xhr.onerror = () => reject(new Error('Nätverksfel vid upload'));
-        xhr.send(file);
-      });
-    }
-
-    async function extractTextWithPDFJS(arrayBuf, maxPages){
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-      const N = Math.min(pdf.numPages, maxPages);
-      let text = "";
-      for (let p = 1; p <= N; p++) {
-        const page = await pdf.getPage(p);
-        const tc   = await page.getTextContent();
-        const pageText = tc.items.map(it => it.str).join(" ").replace(/\s+/g," ").trim();
-        if (pageText) text += "\n\n[SID "+p+"]\n" + pageText;
-        setExtractProgress((p/N)*100);
-        await new Promise(r=>setTimeout(r,0)); // yield för UI
-      }
-      return { text: text.trim(), pagesUsed:N, totalPages: pdf.numPages };
-    }
-
-    async function upload(){
-      const f=document.getElementById('pdf').files[0];
-      if(!f){ alert('Välj PDF'); return; }
-
-      setUploadProgress(0); setExtractProgress(0);
-      out('Laddar upp till R2 ...');
-
-      let upJson;
-      try {
-        upJson = await uploadToWorkerWithProgress(f);
-      } catch(e){
-        out({ok:false, steg:'upload', error:String(e)});
-        return;
-      }
-      document.getElementById('key').textContent = upJson.key;
-
-      // Lokal extrahering (PDF.js) med timeout
-      try {
-        out('Extraherar text lokalt (PDF.js) ...');
-        const arrayBuf = await f.arrayBuffer();
-        const { text, pagesUsed, totalPages } = await Promise.race([
-          extractTextWithPDFJS(arrayBuf, 20),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),15000))
-        ]);
-        window.__EXTRACTED_TEXT__ = text || "";
-        out({ steg:"upload+extract", key: upJson.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
-      } catch (e) {
-        console.warn('PDF.js misslyckades:', e);
-        window.__EXTRACTED_TEXT__ = "";
-        setExtractProgress(100);
-        out({ steg:"upload (ingen lokal text, använder slice-fallback)", key: upJson.key, pdfjs_error: String(e) });
-      }
-    }
-
-    async function processRun(){
-      const key=document.getElementById('key').textContent.trim(); if(!key) return alert('Ladda upp först');
-      const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
-      const slice=Number(document.getElementById('slice').value)||300000;
-      const model=document.getElementById('model').value;
-      const text = (window.__EXTRACTED_TEXT__ && window.__EXTRACTED_TEXT__.trim().length>0)
-        ? window.__EXTRACTED_TEXT__ : null;
-
-      // Nya alternativ för kassaflöde/lån
-      const options = {
-        ränta: Number(document.getElementById('rate').value) || 0.05,
-        amort_tid: Number(document.getElementById('amort').value) || 30
+  function uploadToWorkerWithProgress(file){
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'upload', true);
+      xhr.setRequestHeader('Content-Type', 'application/pdf');
+      xhr.upload.onprogress = (e) => setUploadProgress(e.lengthComputable ? (e.loaded/e.total)*100 : 50);
+      xhr.onload = () => {
+        try {
+          const json = JSON.parse(xhr.responseText || '{}');
+          if (xhr.status>=200 && xhr.status<300 && json.ok) resolve(json);
+          else reject(json);
+        } catch(e){ reject(e); }
       };
+      xhr.onerror = () => reject(new Error('Nätverksfel vid upload'));
+      xhr.send(file);
+    });
+  }
 
-      out('Kör extraktion ...');
-      const r=await fetch('process',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ key, analyses, slice_bytes:slice, model, text, options })
-      });
-      const json = await r.json();
-      out(json);
+  async function extractTextWithPDFJS(arrayBuf, maxPages){
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+    const N = Math.min(pdf.numPages, maxPages);
+    let text = "";
+    for (let p=1; p<=N; p++){
+      const page = await pdf.getPage(p);
+      const tc   = await page.getTextContent();
+      const pageText = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+      if (pageText) text += "\n\n[SID "+p+"]\n" + pageText;
+      setExtractProgress((p/N)*100);
+      await new Promise(r=>setTimeout(r,0));
     }
+    return { text: text.trim(), pagesUsed:N, totalPages: pdf.numPages };
+  }
 
-    document.getElementById('btnUpload').addEventListener('click',upload);
-    document.getElementById('btnProcess').addEventListener('click',processRun);
-  </script>
+  async function upload(){
+    const f=document.getElementById('pdf').files[0];
+    if(!f){ alert('Välj PDF'); return; }
+    setUploadProgress(0); setExtractProgress(0);
+    out('Laddar upp till R2 ...');
+    let upJson;
+    try { upJson = await uploadToWorkerWithProgress(f); }
+    catch(e){ out({ok:false, steg:'upload', error:String(e)}); return; }
+    document.getElementById('key').textContent = upJson.key;
+
+    try {
+      out('Extraherar text lokalt (PDF.js) ...');
+      const arrayBuf = await f.arrayBuffer();
+      const { text, pagesUsed, totalPages } = await Promise.race([
+        extractTextWithPDFJS(arrayBuf, 20),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),15000))
+      ]);
+      window.__EXTRACTED_TEXT__ = text || "";
+      out({ steg:"upload+extract", key: upJson.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
+    } catch (e) {
+      console.warn('PDF.js misslyckades:', e);
+      window.__EXTRACTED_TEXT__ = "";
+      setExtractProgress(100);
+      out({ steg:"upload (ingen lokal text, använder slice-fallback)", key: upJson.key, pdfjs_error: String(e) });
+    }
+  }
+
+  function getNumber(id, fallback=null){
+    const v = Number(document.getElementById(id).value);
+    return Number.isFinite(v) ? v : fallback;
+  }
+
+  async function processRun(){
+    const key=document.getElementById('key').textContent.trim(); if(!key) return alert('Ladda upp först');
+    const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
+    const slice=Number(document.getElementById('slice').value)||300000;
+    const model=document.getElementById('model').value;
+    const text = (window.__EXTRACTED_TEXT__ && window.__EXTRACTED_TEXT__.trim().length>0) ? window.__EXTRACTED_TEXT__ : null;
+
+    const options = {
+      // virkespris
+      price_per_m3sk: getNumber('price_per_m3sk'),
+      price_sawlog: getNumber('price_sawlog'),
+      price_pulp: getNumber('price_pulp'),
+      share_sawlog_pct: getNumber('share_sawlog_pct'),
+      share_pulp_pct: getNumber('share_pulp_pct'),
+      // rörliga
+      harvest_cost_per_m3: getNumber('harvest_cost_per_m3'),
+      transport_cost_per_m3: getNumber('transport_cost_per_m3'),
+      // skogsvård + mgmt
+      replant_cost_per_ha: getNumber('replant_cost_per_ha'),
+      site_prep_cost_per_ha: getNumber('site_prep_cost_per_ha'),
+      precommercial_thin_per_ha: getNumber('precommercial_thin_per_ha'),
+      mgmt_cost_per_ha: getNumber('mgmt_cost_per_ha'),
+      // skatt
+      tax_rate_pct: getNumber('tax_rate_pct')/100,
+      skogsavdrag_pct: getNumber('skogsavdrag_pct')/100,
+      // finans & plan
+      interest_rate_pct: getNumber('interest_rate_pct')/100,
+      amort_years: getNumber('amort_years'),
+      target_DSCR: getNumber('target_DSCR'),
+      discount_rate_pct: getNumber('discount_rate_pct')/100,
+      harvest_now_pct: getNumber('harvest_now_pct'),
+      years: getNumber('years')
+    };
+
+    out('Kör extraktion ...');
+    const r=await fetch('process',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ key, analyses, slice_bytes:slice, model, text, options })
+    });
+    out(await r.json());
+  }
+
+  document.getElementById('btnUpload').addEventListener('click',upload);
+  document.getElementById('btnProcess').addEventListener('click',processRun);
+</script>
 </body>
 </html>
