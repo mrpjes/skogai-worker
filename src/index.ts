@@ -28,7 +28,7 @@ export default {
     // Health
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
 
-    // Valfri access-token
+    // Valfri access-token 
     if (env.ACCESS_TOKEN) {
       const t = req.headers.get("x-access-token");
       if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
