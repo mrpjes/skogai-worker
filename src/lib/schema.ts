@@ -3,9 +3,9 @@ export function skogsSchema() {
   return {
     type: "object",
     properties: {
-      // --- Grunddata (från prospektet/härlett) ---
+      // --- Grunddata från prospekt ---
       fastighetsbeteckning: { type: ["string","null"] },
-      fastighet:            { type: ["string","null"] }, // bakåtkompatibelt
+      fastighet:            { type: ["string","null"] }, // bakåtkomp
       kommun:               { type: ["string","null"] },
       lage_beskrivning:     { type: ["string","null"] },
 
@@ -15,9 +15,9 @@ export function skogsSchema() {
       volym_total_m3sk:  { type: ["number","null"] },
       volym_per_ha_m3sk: { type: ["number","null"] },
 
-      bonitet:       { type: ["number","null"] }, // m³sk/ha/år
+      bonitet: { type: ["number","null"] }, // m³sk/ha/år
 
-      // Huggningsklasser med volym per klass (viktigt för S1+S2)
+      // Huggningsklasser (volym m³sk)
       huggningsklasser: {
         type: ["object","null"],
         properties: {
@@ -50,7 +50,7 @@ export function skogsSchema() {
         additionalProperties: true
       },
 
-      // Ekonomiska uppgifter som hör hemma i Nyckeltal (presenteras där)
+      // Pris & tax (visas i Nyckeltal)
       pris_forvantning_sek: { type: ["number","null"] },
       taxeringsvarde_sek:   { type: ["number","null"] }
     },
