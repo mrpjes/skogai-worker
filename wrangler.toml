@@ -1,13 +1,11 @@
-name = "skogai"                   # Namnet på din Worker (du kan byta om du vill)
-main = "src/index.ts"             # Här ligger din huvudkod
-compatibility_date = "2025-09-05" # Ett datum som talar om vilken Workers-version som används
+name = "skogai01"
+main = "src/index.ts"
+compatibility_date = "2025-09-05"
 
-# Kopplar din R2 bucket (som du redan har skapat i Cloudflare)
 [[r2_buckets]]
-binding = "skogaiR2bucket"        # Namnet du använder i koden (måste matcha!)
-bucket_name = "skogai01"          # Det riktiga bucket-namnet i Cloudflare
+binding = "skogaiR2bucket"
+bucket_name = "skogai01"
 
-# Kopplar statiska filer (frontend HTML/CSS/JS)
 [assets]
-directory = "./public"            # Här lägger du public/index.html
-binding = "ASSETS"
+directory = "./public"
+binding = "ASSETS"   # (används inte nu när UI är inline, men bra att ha för framtiden)
