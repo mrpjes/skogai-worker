@@ -1,8 +1,8 @@
 // src/index.ts
 export interface Env {
-  skogaiR2bucket: R2Bucket;
-  OPENAI_API_KEY: string;
-  ACCESS_TOKEN?: string;
+  skogaiR2bucket: R2Bucket;   // R2-binding (wrangler.toml)
+  OPENAI_API_KEY: string;     // Secret i Cloudflare
+  ACCESS_TOKEN?: string;      // Valfri enkel auth header
 }
 
 const JSON_HDR = { "content-type": "application/json" } as const;
@@ -11,7 +11,7 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
-    // CORS preflight
+    // ---- CORS preflight
     if (req.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -22,23 +22,23 @@ export default {
       });
     }
 
-    // Health
+    // ---- Health
     if (url.pathname === "/health") return new Response("ok", { status: 200 });
 
-    // Optional access token
+    // ---- Enkel auth (valfri)
     if (env.ACCESS_TOKEN) {
       const t = req.headers.get("x-access-token");
       if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
     }
 
-    // Root (du serverar index.html via [assets], så här visar vi bara info)
+    // ---- Rot (UI ligger i public/ om du kör assets; annars bara info)
     if (url.pathname === "/" && req.method === "GET") {
-      return new Response('SkogAI Worker – servar API. UI ligger i "public/".', {
+      return new Response('SkogAI API – /upload, /process, /get/{key}. UI i "public/".', {
         headers: { "content-type": "text/plain" },
       });
     }
 
-    // Upload PDF -> R2
+    // ---- Upload PDF -> R2
     if (url.pathname === "/upload" && req.method === "POST") {
       const ct = req.headers.get("content-type") || "";
       if (!ct.startsWith("application/pdf")) return j({ ok: false, error: "Skicka application/pdf" }, 400);
@@ -48,7 +48,7 @@ export default {
       return j({ ok: true, key });
     }
 
-    // Process (extrahera + analysera)
+    // ---- Process (extrahera + analysera)
     if (url.pathname === "/process" && req.method === "POST") {
       try {
         const body = await req.json().catch(() => ({}));
@@ -59,22 +59,23 @@ export default {
         const SLICE_BYTES = Math.min(800_000, Math.max(120_000, Number(body?.slice_bytes) || 300_000));
         if (!key) return j({ ok: false, error: "Saknar 'key'" }, 400);
 
-        // text extraherad i frontend (PDF.js) – använd den i första hand
+        // Text från frontend (PDF.js) – använd i första hand
         const textFromClient =
           typeof body?.text === "string" && body.text.trim().length > 0 ? (body.text as string).trim() : null;
 
-        const obj = await env.skogaiR2bucket.get(key);
-        if (!obj) return j({ ok: false, error: "File not found in R2", key }, 404);
-        const ab = await obj.arrayBuffer();
+        // Hämta fil från R2 (för ev. slice-fallback)
+        const o = await env.skogaiR2bucket.get(key);
+        if (!o) return j({ ok: false, error: "File not found in R2", key }, 404);
+        const ab = await o.arrayBuffer();
 
-        // Payload till modellen
+        // Bygg payload till modellen
         let userPayload: string;
         let sliceInfo: { input_size_bytes: number; slice_bytes_used: number; partial: boolean } | null = null;
 
         if (textFromClient) {
           userPayload = `Detta är text extraherad ur ett svenskt skogsprospekt (PDF).\n\n${textFromClient}`;
         } else {
-          // Fallback: TA SLUTET (svansen) av PDF – sammanställningar ligger oftast sist
+          // Fallback: ta SLUTET av PDF (sammanställningar ligger ofta sist)
           const size = Math.min(ab.byteLength, SLICE_BYTES);
           const start = Math.max(0, ab.byteLength - size);
           const u8 = new Uint8Array(ab).slice(start, start + size);
@@ -89,7 +90,7 @@ export default {
             `Fokusera på tabeller och sammanställningar enligt schema.\n\nPDF_base64:\n${b64}`;
         }
 
-        // Fokus-hint: prioritera "Sammanställning över fastigheten" m.m.
+        // Fokus-hint (prioritera ”Sammanställning över fastigheten” m.m.)
         const pageNote = Array.isArray((body as any)?.pages)
           ? `Använd i första hand siffror från sidorna: ${(body as any).pages.join(", ")}.`
           : "";
@@ -160,7 +161,10 @@ ${userPayload}`;
           }
         }
 
-        // Kör analyser
+        // Kör analyser (med säkra default-antaganden)
+        (ANALYZERS as any).__last_initial = null;
+        (ANALYZERS as any).__last_loan = null;
+
         const results: Record<string, unknown> = {};
         const ctx: AnalyzerCtx = { baseData, options };
         for (const name of analyses) {
@@ -191,7 +195,7 @@ ${userPayload}`;
       }
     }
 
-    // Hämta PDF från R2
+    // ---- Hämta PDF från R2
     if (url.pathname.startsWith("/get/")) {
       const k = decodeURIComponent(url.pathname.replace("/get/", ""));
       const o = await env.skogaiR2bucket.get(k);
@@ -201,14 +205,14 @@ ${userPayload}`;
       });
     }
 
-    // default
+    // ---- default
     return new Response(JSON.stringify({ ok: true, msg: "UI + API running" }), {
       headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
     });
   },
 };
 
-// ---------- Hjälpare ----------
+// ================= Helpers =================
 function j(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), {
     status,
@@ -227,9 +231,11 @@ function base64FromBytes(u8: Uint8Array): string {
   return btoa(s);
 }
 
-// Försök hitta ett JSON-objekt som ligger som sträng i Responses-objektet
+// Försök hitta JSON som ligger som sträng i Responses-svaret
 function extractInnerJsonString(s: string): string | null {
-  const m = s.match(/{\\\"fastighet\\\"[\s\S]*?}/) || s.match(/{\\\"fastighetsbeteckning\\\"[\s\S]*?}/);
+  const m =
+    s.match(/{\\\"fastighet\\\"[\s\S]*?}/) ||
+    s.match(/{\\\"fastighetsbeteckning\\\"[\s\S]*?}/);
   return m ? m[0].replace(/\\"/g, '"') : null;
 }
 
@@ -243,19 +249,17 @@ function n(v: any): number | null {
   const x = Number(v);
   return Number.isFinite(x) ? x : null;
 }
-
 function nz(v: any): number {
   const x = n(v);
   return x ?? 0;
 }
-
 function pctToDecMaybe(v: any, fallback: number | null = null): number | null {
   const x = n(v);
   if (x === null) return fallback;
   return x > 1 ? x / 100 : x;
 }
 
-// ---------- JSON-schema ----------
+// ================= JSON-schema =================
 function skogsSchema() {
   return {
     type: "object",
@@ -317,11 +321,11 @@ function skogsSchema() {
   };
 }
 
-// ---------- Analyser ----------
+// ================= Analyser (med defaults) =================
 type AnalyzerCtx = { baseData: any; options: Record<string, unknown> };
 
 const ANALYZERS = {
-  // 1) Nyckeltal (priser m.m.)
+  // 1) Nyckeltal
   key_metrics: ({ baseData, options }: AnalyzerCtx) => {
     const pris = n(baseData?.pris_forvantning_sek);
     const taxv = n(baseData?.taxeringsvarde_sek);
@@ -329,16 +333,15 @@ const ANALYZERS = {
     const vTot = n(baseData?.volym_total_m3sk);
 
     const bonitet = n(baseData?.bonitet);
-    const tillväxt_pdf = n(baseData?.tillvaxt_m3sk_per_ar);
-    const tillv = tillväxt_pdf ?? (bonitet && (n(baseData?.skogsmark_ha) ?? 0) ? bonitet * (n(baseData?.skogsmark_ha) ?? 0) : null);
+    const till_pdf = n(baseData?.tillvaxt_m3sk_per_ar);
+    const tillv = till_pdf ?? (bonitet && (n(baseData?.skogsmark_ha) ?? 0) ? bonitet * (n(baseData?.skogsmark_ha) ?? 0) : null);
 
     const prisPerHa = pris && ha ? pris / ha : null;
     const prisPerM3 = pris && vTot ? pris / vTot : null;
 
     const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
-    const tillväxtVärde = tillv ? tillv * price_per_m3sk : null;
+    const tillvVarde = tillv ? tillv * price_per_m3sk : null;
 
-    // enkel “andel slutavverkningsbar” om S1+S2 finns
     const s1 = n(baseData?.huggningsklasser?.S1_m3sk);
     const s2 = n(baseData?.huggningsklasser?.S2_m3sk);
     const andelSlut = vTot && (s1 || s2) ? (((nz(s1) + nz(s2)) / vTot) * 100) : null;
@@ -351,28 +354,28 @@ const ANALYZERS = {
         pris_per_hektar: prisPerHa,
         pris_per_m3sk: prisPerM3,
         tillvaxt_m3sk_per_ar: tillv,
-        tillvaxtvarde_sek_per_ar: tillväxtVärde,
+        tillvaxtvarde_sek_per_ar: tillvVarde,
         kapitaliseringsranta_pct: null,
         andel_slutavverkningsbar_pct: andelSlut,
       },
     };
   },
 
-  // 2) Initial avverkning (skattlogik – förenklad)
+  // 2) Initial avverkning (skatt – förenklad, med skogsavdrag + skogskonto)
   initial_harvest_taxed: ({ baseData, options }: AnalyzerCtx) => {
     const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
     const taxRate = pctToDecMaybe(options?.tax_rate_pct, 0.30) ?? 0.30;
     const skogskontoShare = pctToDecMaybe(options?.skogskonto_share_pct, 0.60) ?? 0.60;
 
-    const pris = n(baseData?.pris_forvantning_sek);
+    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
     const s1 = n(baseData?.huggningsklasser?.S1_m3sk) ?? 0;
     const s2 = n(baseData?.huggningsklasser?.S2_m3sk) ?? 0;
     const vol = nz(s1) + nz(s2);
 
     const brutto = vol * price_per_m3sk;
 
-    // Skogsavdrag (max ~50% av priset). Använd det man kan direkt – tak = brutto.
-    const skogsavdragMax = pris ? 0.50 * pris : 0;
+    // Skogsavdrag (tak ~50% av priset), men inte mer än brutto
+    const skogsavdragMax = 0.50 * pris;
     const skogsavdrag = Math.min(skogsavdragMax, brutto);
 
     const beskattningsbarEfterAvdrag = Math.max(0, brutto - skogsavdrag);
@@ -380,12 +383,11 @@ const ANALYZERS = {
     const skattNu = (beskattningsbarEfterAvdrag - skogskontoIns) * taxRate;
     const nettoIdag = brutto - skattNu;
 
-    const utskjSkatt = skogskontoIns * taxRate; // latent skatt på skogskontoinsättning
+    const utskjSkatt = skogskontoIns * taxRate;      // latent skatt
     const skogskontoNetto = skogskontoIns * (1 - taxRate);
+    const skuldNedPct = pris > 0 ? (nettoIdag / pris) * 100 : null;
 
-    const skuldNedPct = pris ? (nettoIdag / pris) * 100 : null;
-
-    return {
+    const res = {
       ok: true,
       initial_avverkning: {
         volym_avverkning_m3sk: vol || null,
@@ -399,59 +401,62 @@ const ANALYZERS = {
         skuldnedbetalning_andel_av_pris_netto_pct: skuldNedPct,
       },
     };
+    (ANALYZERS as any).__last_initial = res;
+    return res;
   },
 
-  // 3) Lån & skogskonto
+  // 3) Lån & skogskonto (default 100% belåning, 5% ränta om ej angetts)
   loan_sustainability: ({ baseData, options }: AnalyzerCtx) => {
-    const pris = n(baseData?.pris_forvantning_sek);
-    const taxRate = pctToDecMaybe(options?.tax_rate_pct, 0.30) ?? 0.30;
-    const loanShare = pctToDecMaybe(options?.loan_share_pct, 1.0) ?? 1.0;
-    const r = pctToDecMaybe(options?.interest_rate_pct, 0.05) ?? 0.05;
+    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
+    const loanShare = pctToDecMaybe(options?.loan_share_pct, 1.0) ?? 1.0; // 100%
+    const r = pctToDecMaybe(options?.interest_rate_pct, 0.05) ?? 0.05;     // 5%
 
-    // Hämta netto/skogskonto från initial_harvest_taxed om den körts; annars approximera noll.
-    const init = (ANALYZERS as any).__last_initial ?? null;
-    const netto = init?.initial_avverkning?.netto_idag_sek ?? 0;
-    const skogskontoNetto = init?.initial_avverkning?.skogskonto_netto_efter_fr_skatt_sek ?? 0;
+    let init = (ANALYZERS as any).__last_initial;
+    if (!init || !init.initial_avverkning) {
+      init = (ANALYZERS as any).initial_harvest_taxed({ baseData, options });
+    }
+    const netto = n(init?.initial_avverkning?.netto_idag_sek) ?? 0;
+    const skogskontoNetto = n(init?.initial_avverkning?.skogskonto_netto_efter_fr_skatt_sek) ?? 0;
 
     const givenLoan = n(options?.loan_amount_sek);
-    const initialLoan = givenLoan ?? (pris ? pris * loanShare : null);
+    const initialLoan = (givenLoan ?? (pris * loanShare)) || 0;
 
-    const amort = initialLoan ? Math.min(initialLoan, netto) : null;
-    const rest = initialLoan != null && amort != null ? Math.max(0, initialLoan - amort) : initialLoan ?? null;
+    const amort = Math.min(initialLoan, Math.max(0, netto));
+    const rest = Math.max(0, initialLoan - amort);
 
-    const yearlyInterest = rest != null ? rest * r : null;
-    const yearsCovered = yearlyInterest && yearlyInterest > 0 ? (skogskontoNetto / yearlyInterest) : null;
+    const yearlyInterest = rest * r;
+    const yearsCovered = yearlyInterest > 0 ? (skogskontoNetto / yearlyInterest) : null;
 
-    return {
+    const res = {
       ok: true,
       lan_och_skogskonto: {
         initial_lan_sek: initialLoan,
         amortering_med_netto_sek: amort,
         restskuld_sek: rest,
         arlig_ranta_sek: yearlyInterest,
-        skogskonto_netto_efter_fr_skatt_sek: skogskontoNetto || 0,
+        skogskonto_netto_efter_fr_skatt_sek: skogskontoNetto,
         ar_rante_tackt_av_skogskonto: yearsCovered,
       },
     };
+    (ANALYZERS as any).__last_loan = res;
+    return res;
   },
 
   // 4) Räntefördelning (positiv)
   interest_distribution: ({ baseData, options }: AnalyzerCtx) => {
-    const pris = n(baseData?.pris_forvantning_sek);
-    const rfdRate = pctToDecMaybe(options?.interest_distribution_rate_pct, 0.0862) ?? 0.0862; // 8.62% 2025
+    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
+    const rfdRate = pctToDecMaybe(options?.interest_distribution_rate_pct, 0.0862) ?? 0.0862; // 2025 ~8,62 %
     const busTax = pctToDecMaybe(options?.business_tax_effective_pct, 0.45) ?? 0.45;
 
-    // Restskuld hämtas från loan_sustainability om den körts
-    const loan = (ANALYZERS as any).__last_loan ?? null;
-    const rest = n(loan?.lan_och_skogskonto?.restskuld_sek);
+    let loan = (ANALYZERS as any).__last_loan;
+    if (!loan || !loan.lan_och_skogskonto) {
+      loan = (ANALYZERS as any).loan_sustainability({ baseData, options });
+    }
+    const rest = n(loan?.lan_och_skogskonto?.restskuld_sek) ?? 0;
 
-    // Kapitalunderlag ~ eget kapital = pris – skuld (förenklad)
-    const kapitalunderlag = pris != null && rest != null ? Math.max(0, pris - rest) : (pris ?? null);
-    const belopp = kapitalunderlag != null ? kapitalunderlag * rfdRate : null;
-
-    // Indikativ skattebesparing: skillnaden mot näringsbeskattning (~45%) jämfört med kapital (30%)
-    const diff = busTax - 0.30;
-    const sparing = belopp != null ? Math.max(0, belopp * diff) : null;
+    const kapitalunderlag = Math.max(0, pris - rest);
+    const belopp = kapitalunderlag * rfdRate;
+    const sparing = Math.max(0, belopp * (busTax - 0.30)); // indikativ jämfört med näring
 
     return {
       ok: true,
@@ -468,23 +473,24 @@ const ANALYZERS = {
   forward_cashflow_and_debt: ({ baseData, options }: AnalyzerCtx) => {
     const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
     const r = pctToDecMaybe(options?.interest_rate_pct, 0.05) ?? 0.05;
-    const pris = n(baseData?.pris_forvantning_sek);
+    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
 
-    // Tillväxt från data/nyckeltal
     const bonitet = n(baseData?.bonitet);
     const ha = n(baseData?.skogsmark_ha);
-    const tillväxt_pdf = n(baseData?.tillvaxt_m3sk_per_ar);
-    const tillv = tillväxt_pdf ?? (bonitet && ha ? bonitet * ha : null);
-    const yearlyIncome = tillv != null ? tillv * price_per_m3sk : null;
+    const till_pdf = n(baseData?.tillvaxt_m3sk_per_ar);
+    const tillv = (till_pdf != null) ? till_pdf : ((bonitet && ha) ? bonitet * ha : 0);
 
-    // Restskuld från loan_sustainability
-    const loan = (ANALYZERS as any).__last_loan ?? null;
-    const rest = n(loan?.lan_och_skogskonto?.restskuld_sek);
+    const yearlyIncome = tillv * price_per_m3sk;
 
-    const dscrVsGiven = yearlyIncome != null && rest != null && rest > 0 ? yearlyIncome / (rest * r) : null;
-    const dscrVsAsk = yearlyIncome != null && pris ? yearlyIncome / (pris * r) : null;
+    let loan = (ANALYZERS as any).__last_loan;
+    if (!loan || !loan.lan_och_skogskonto) {
+      loan = (ANALYZERS as any).loan_sustainability({ baseData, options });
+    }
+    const rest = n(loan?.lan_och_skogskonto?.restskuld_sek) ?? 0;
 
-    const loanCapacity = yearlyIncome != null && r > 0 ? yearlyIncome / r : null;
+    const dscrVsGiven = rest > 0 ? (yearlyIncome / (rest * r)) : null;
+    const dscrVsAsk = pris > 0 ? (yearlyIncome / (pris * r)) : null;
+    const loanCapacity = r > 0 ? (yearlyIncome / r) : null;
 
     return {
       ok: true,
@@ -498,20 +504,20 @@ const ANALYZERS = {
     };
   },
 
-  // 6) Sammanfattningspaket – bygger på övriga analyser
+  // 6) Sammanfattningspaket – kör ordning och cachea mellansteg
   summary_pack: ({ baseData, options }: AnalyzerCtx) => {
-    // Kör interna beroenden i ordning och spara senaste resultat så andra kan läsa
-    const km = (ANALYZERS as any).key_metrics({ baseData, options });
+    const km   = (ANALYZERS as any).key_metrics({ baseData, options });
     const init = (ANALYZERS as any).initial_harvest_taxed({ baseData, options });
-    (ANALYZERS as any).__last_initial = init; // cachea för loan
+    (ANALYZERS as any).__last_initial = init;
+
     const loan = (ANALYZERS as any).loan_sustainability({ baseData, options });
-    (ANALYZERS as any).__last_loan = loan; // cachea för rfd + forward
+    (ANALYZERS as any).__last_loan = loan;
+
     const idst = (ANALYZERS as any).interest_distribution({ baseData, options });
-    const fwd = (ANALYZERS as any).forward_cashflow_and_debt({ baseData, options });
+    const fwd  = (ANALYZERS as any).forward_cashflow_and_debt({ baseData, options });
 
     const gd = {
-      fastighetsbeteckning:
-        baseData?.fastighetsbeteckning ?? baseData?.fastighet ?? null,
+      fastighetsbeteckning: baseData?.fastighetsbeteckning ?? baseData?.fastighet ?? null,
       kommun: baseData?.kommun ?? null,
       areal_total_ha: n(baseData?.areal_total_ha),
       skogsmark_ha: n(baseData?.skogsmark_ha),
@@ -530,7 +536,7 @@ const ANALYZERS = {
     return {
       ok: true,
       grunddata: gd,
-      nyckeltal: km?.nyckeltal ?? {},
+      nyckeltal: (km as any)?.nyckeltal ?? {},
       lonsamhet: {
         ...(init ?? {}),
         ...(loan ?? {}),
