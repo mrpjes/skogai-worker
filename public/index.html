@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>SkogAI – Grunddata, Nyckeltal & Lönsamhet</title>
+  <title>Vedrik Skog och lite AI</title>
   <style>
     body{font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 12px}
     h1{margin:0 0 12px}
-    fieldset{border:1px solid #ddd;padding:12px 16px;margin:16px 0;border-radius:10px}
+    fieldset{border:1px solid #ddd;padding:12px 16px;margin:16px 0;border-radius:10px;background:#fff}
     legend{font-weight:700}
     label{display:inline-flex;gap:6px;align-items:center;margin:6px 14px 6px 0}
     input[type=number]{width:120px}
@@ -23,7 +23,10 @@
     .card h4{margin:0 0 6px}
     .kv{display:flex;justify-content:space-between;gap:8px}
     .pill{display:inline-block;padding:2px 8px;border:1px solid #ddd;border-radius:999px;font-size:12px;color:#555}
-    #raw{white-space:pre-wrap;background:#fbfbfb;border:1px solid #eee;padding:12px;border-radius:8px}
+    #out{white-space:pre-wrap;background:#fbfbfb;border:1px solid #eee;padding:12px;border-radius:8px}
+    details.block{margin-top:12px;border:1px solid #eee;border-radius:8px;background:#fbfbfb}
+    details.block summary{cursor:pointer;padding:10px 12px;color:#555;font-weight:600}
+    details.block pre{margin:0;padding:12px;border-top:1px solid #eee;white-space:pre-wrap}
   </style>
 
   <!-- PDF.js -->
@@ -34,7 +37,7 @@
   </script>
 </head>
 <body>
-<h1>SkogAI – Grunddata, Nyckeltal & Lönsamhet</h1>
+<h1>Vedrik Skog och lite AI</h1>
 
 <!-- 1) Ladda upp -->
 <fieldset>
@@ -122,15 +125,43 @@
 <h3>Resultat</h3>
 <div id="cards" class="grid"></div>
 
-<h3>Raw-svar</h3>
-<pre id="raw">{ "tips": "1) Ladda upp, 2) Välj analyser & antaganden, 3) Kör. Extraktion prioriterar 'Sammanställning över fastigheten'." }</pre>
+<!-- Diagnostik & rådata (kollapsbart) -->
+<h3>Diagnostik</h3>
+<div id="diag"></div>
 
 <script>
   let __lastResponse__ = null;
+  let __extractedText__ = ""; // för att kunna visa dolt i details
 
   const setUploadProgress  = p => { document.getElementById('upPct').textContent=Math.round(p)+'%'; document.getElementById('upBar').style.width=p+'%'; };
   const setExtractProgress = p => { document.getElementById('exPct').textContent=Math.round(p)+'%'; document.getElementById('exBar').style.width=p+'%'; };
-  const raw = (o) => document.getElementById('raw').textContent = typeof o==='string'? o : JSON.stringify(o,null,2);
+
+  function renderDiagnostics(obj){
+    const el = document.getElementById('diag');
+    const pages = Array.isArray(window.__EXTRACTED_PAGES__) ? window.__EXTRACTED_PAGES__ : [];
+    el.innerHTML = `
+      <details class="block" open>
+        <summary>Extraktion – sammanfattning</summary>
+        <pre>${JSON.stringify({
+          steg: obj?.steg || undefined,
+          key: document.getElementById('key').textContent.trim() || undefined,
+          pages_used: obj?.pages_used ?? undefined,
+          total_pages: obj?.total_pages ?? undefined,
+          selected_pages: pages
+        }, null, 2)}</pre>
+      </details>
+
+      <details class="block">
+        <summary>Extraherad text (PDF.js)</summary>
+        <pre>${__extractedText__ ? __extractedText__.slice(0, 50000) : "—"}</pre>
+      </details>
+
+      <details class="block">
+        <summary>RAW-data (modellens svar)</summary>
+        <pre>${obj?.raw ? (typeof obj.raw === 'string' ? obj.raw : JSON.stringify(obj.raw, null, 2)) : "—"}</pre>
+      </details>
+    `;
+  }
 
   function uploadToWorkerWithProgress(file){
     return new Promise((resolve, reject) => {
@@ -149,7 +180,7 @@
     });
   }
 
-  // --------- Förbättrad PDF.js extrahering (prioritera sammanställning) ----------
+  // ---------- Förbättrad PDF.js extrahering ----------
   const SUMMARY_ANCHORS = [
     "sammanställning över fastigheten","sammanstallning over fastigheten",
     "sammanställning","sammanstallning"
@@ -182,9 +213,7 @@
       const pageText = tc.items.map(it => it.str).join(" ").replace(/\s+/g," ").trim();
 
       if (preferSummary && includesAny(pageText, SUMMARY_ANCHORS)) {
-        summaryHits.add(p);
-        if (p+1<=total) summaryHits.add(p+1);
-        if (p+2<=total) summaryHits.add(p+2);
+        summaryHits.add(p); if (p+1<=total) summaryHits.add(p+1); if (p+2<=total) summaryHits.add(p+2);
       }
       if (includesAny(pageText, IMPORTANT_SECTIONS)) {
         importantHits.add(p);
@@ -224,23 +253,22 @@
     const f=document.getElementById('pdf').files[0];
     if(!f){ alert('Välj PDF'); return; }
     setUploadProgress(0); setExtractProgress(0);
-    raw('Laddar upp till R2 ...');
+    renderDiagnostics({ steg: "upload:start" });
 
     let upJson;
     try { upJson = await uploadToWorkerWithProgress(f); }
-    catch(e){ raw({ok:false, steg:'upload', error:String(e)}); return; }
+    catch(e){ renderDiagnostics({ steg:'upload:error', error:String(e) }); return; }
     document.getElementById('key').textContent = upJson.key;
 
     try {
-      raw('Extraherar text lokalt (PDF.js) ...');
       const arrayBuf = await f.arrayBuffer();
       const { text, pagesUsed, totalPages } = await extractTextWithPDFJS(arrayBuf);
-      window.__EXTRACTED_TEXT__ = text || "";
-      raw({ steg:"upload+extract", key: upJson.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages, pages: window.__EXTRACTED_PAGES__ });
+      __extractedText__ = text || "";
+      renderDiagnostics({ steg: "upload+extract", key: upJson.key, pages_used: pagesUsed, total_pages: totalPages, raw: "—" });
     } catch (e) {
-      window.__EXTRACTED_TEXT__ = "";
+      __extractedText__ = "";
       setExtractProgress(100);
-      raw({ steg:"upload (ingen lokal text, använder slice-fallback)", key: upJson.key, pdfjs_error: String(e) });
+      renderDiagnostics({ steg:"upload (ingen lokal text, använder slice-fallback)", key: upJson.key, error:String(e), raw:"—" });
     }
   }
 
@@ -252,7 +280,7 @@
     const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
     const slice=Number(document.getElementById('slice').value)||800000;
     const model=document.getElementById('model').value;
-    const text=(window.__EXTRACTED_TEXT__ && window.__EXTRACTED_TEXT__.trim().length>0) ? window.__EXTRACTED_TEXT__ : null;
+    const text=(__extractedText__ && __extractedText__.trim().length>0) ? __extractedText__ : null;
 
     const options = {
       price_per_m3sk: getNum('price_per_m3sk') ?? null,
@@ -265,7 +293,6 @@
       loan_amount_sek: getNum('loan_amount_sek') ?? null
     };
 
-    raw('Kör extraktion + analyser ...');
     const r=await fetch('process',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -273,8 +300,9 @@
     });
     const json = await r.json();
     __lastResponse__ = json;
-    raw(json);
     renderCards(json);
+    renderDiagnostics(json);
+
     document.getElementById('btnExportJSON').disabled = false;
     document.getElementById('btnExportCSV').disabled = false;
   }
@@ -283,9 +311,9 @@
   function formatNumber(v){
     if (v === null || v === undefined) return "–";
     if (typeof v !== 'number' || !isFinite(v)) return String(v);
-    if (Math.abs(v) >= 1_000_000) return v.toFixed(0);
-    if (Math.abs(v) >= 1_000) return v.toFixed(0);
-    return v.toFixed(2);
+    if (Math.abs(v) >= 1_000_000) return v.toLocaleString('sv-SE', { maximumFractionDigits: 0 });
+    if (Math.abs(v) >= 1_000) return v.toLocaleString('sv-SE', { maximumFractionDigits: 0 });
+    return v.toLocaleString('sv-SE', { maximumFractionDigits: 2 });
   }
   function kv(label, value){
     const wrap=document.createElement('div'); wrap.className='kv';
@@ -469,7 +497,9 @@
 
   document.getElementById('btnUpload').addEventListener('click', onUpload);
   document.getElementById('btnProcess').addEventListener('click', onProcess);
-  document.getElementById('btnExportJSON').addEventListener('click', onExportJSON);
+  document.getElementById('btnExportJSON').addEventListener('click', () => {
+    if (!__lastResponse__) return; onExportJSON();
+  });
   document.getElementById('btnExportCSV').addEventListener('click', () => {
     if (!__lastResponse__) return;
     const rows = flattenForCSV(__lastResponse__);
