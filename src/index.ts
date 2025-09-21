@@ -31,9 +31,9 @@ export default {
       if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
     }
 
-    // ---- Rot (UI ligger i public/ om du kör assets; annars bara info)
+    // ---- Rot (UI i public/ om du använder assets; annars bara info)
     if (url.pathname === "/" && req.method === "GET") {
-      return new Response('SkogAI API – /upload, /process, /get/{key}. UI i "public/".', {
+      return new Response('Vedrik Skog och lite AI – API. Använd /upload, /process, /get/{key}.', {
         headers: { "content-type": "text/plain" },
       });
     }
@@ -114,6 +114,11 @@ Sätt null där uppgift saknas. Inga förklaringar, inga markdown-block, inga ex
 JSON_SCHEMA:
 ${schemaStr}
 
+ORDLISTA FÖR FÄLTMAPPNING:
+- "Prisidé", "Utgångspris", "Pris": mappa till "pris_forvantning_sek" (SEK som heltal).
+- "Taxeringsvärde": mappa till "taxeringsvarde_sek".
+- S1, S2, G1, G2, K1, K2 i m³sk: mappa till "huggningsklasser".
+
 INSTRUKTIONER:
 ${FOCUS_HINT}
 
@@ -158,6 +163,15 @@ ${userPayload}`;
             try {
               baseData = JSON.parse(inner);
             } catch {}
+          }
+        }
+
+        // ---- Prisidé fallback från klient-textextrakt ----
+        if (baseData && (baseData.pris_forvantning_sek == null || !(baseData.pris_forvantning_sek > 0))) {
+          const clientText = typeof (body as any)?.text === "string" ? (body as any).text : "";
+          const guessed = extractAskPriceFromText(clientText);
+          if (guessed && guessed > 0) {
+            baseData.pris_forvantning_sek = guessed;
           }
         }
 
@@ -259,6 +273,24 @@ function pctToDecMaybe(v: any, fallback: number | null = null): number | null {
   return x > 1 ? x / 100 : x;
 }
 
+// Prisidé/Utgångspris-fallback ur rå text
+function extractAskPriceFromText(txt: string): number | null {
+  if (!txt) return null;
+  const patterns = [
+    /prisid[eé]\s*[:\-]?\s*([\d\s.,]+)\s*(sek|kr)?/i,
+    /utg[aå]ngspris\s*[:\-]?\s*([\d\s.,]+)\s*(sek|kr)?/i,
+    /pris\s*[:\-]?\s*([\d\s.,]+)\s*(sek|kr)?/i
+  ];
+  for (const re of patterns) {
+    const m = txt.match(re);
+    if (m && m[1]) {
+      const num = Number(m[1].replace(/\s/g, "").replace(/\./g, "").replace(",", "."));
+      if (Number.isFinite(num) && num > 0) return Math.round(num);
+    }
+  }
+  return null;
+}
+
 // ================= JSON-schema =================
 function skogsSchema() {
   return {
@@ -327,10 +359,16 @@ type AnalyzerCtx = { baseData: any; options: Record<string, unknown> };
 const ANALYZERS = {
   // 1) Nyckeltal
   key_metrics: ({ baseData, options }: AnalyzerCtx) => {
-    const pris = n(baseData?.pris_forvantning_sek);
+    let pris = n(baseData?.pris_forvantning_sek);
     const taxv = n(baseData?.taxeringsvarde_sek);
     const ha = n(baseData?.skogsmark_ha) ?? n(baseData?.areal_total_ha);
     const vTot = n(baseData?.volym_total_m3sk);
+
+    // Estimera pris om saknas
+    if ((pris == null || !(pris > 0)) && vTot != null && vTot > 0) {
+      const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
+      pris = vTot * price_per_m3sk;
+    }
 
     const bonitet = n(baseData?.bonitet);
     const till_pdf = n(baseData?.tillvaxt_m3sk_per_ar);
@@ -405,12 +443,22 @@ const ANALYZERS = {
     return res;
   },
 
-  // 3) Lån & skogskonto (default 100% belåning, 5% ränta om ej angetts)
+  // 3) Lån & skogskonto (default 100% belåning, 5% ränta)
   loan_sustainability: ({ baseData, options }: AnalyzerCtx) => {
-    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
+    // --- 1) Hämta/estimera pris ---
+    const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
+    const vTot = n(baseData?.volym_total_m3sk);
+    let pris = n(baseData?.pris_forvantning_sek);
+    if (pris == null || !(pris > 0)) {
+      if (vTot != null && vTot > 0) pris = vTot * price_per_m3sk;
+      else pris = 0;
+    }
+
+    // --- 2) Defaults för lån/ränta ---
     const loanShare = pctToDecMaybe(options?.loan_share_pct, 1.0) ?? 1.0; // 100%
     const r = pctToDecMaybe(options?.interest_rate_pct, 0.05) ?? 0.05;     // 5%
 
+    // --- 3) Initial avverkning (för netto/skogskonto) ---
     let init = (ANALYZERS as any).__last_initial;
     if (!init || !init.initial_avverkning) {
       init = (ANALYZERS as any).initial_harvest_taxed({ baseData, options });
@@ -418,9 +466,11 @@ const ANALYZERS = {
     const netto = n(init?.initial_avverkning?.netto_idag_sek) ?? 0;
     const skogskontoNetto = n(init?.initial_avverkning?.skogskonto_netto_efter_fr_skatt_sek) ?? 0;
 
+    // --- 4) Lånebelopp: explicit > estimat (pris × låneandel) ---
     const givenLoan = n(options?.loan_amount_sek);
     const initialLoan = (givenLoan ?? (pris * loanShare)) || 0;
 
+    // --- 5) Amortera med netto från initial avverkning ---
     const amort = Math.min(initialLoan, Math.max(0, netto));
     const rest = Math.max(0, initialLoan - amort);
 
@@ -444,8 +494,16 @@ const ANALYZERS = {
 
   // 4) Räntefördelning (positiv)
   interest_distribution: ({ baseData, options }: AnalyzerCtx) => {
-    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
-    const rfdRate = pctToDecMaybe(options?.interest_distribution_rate_pct, 0.0862) ?? 0.0862; // 2025 ~8,62 %
+    // Pris (ev. estimerat via key_metrics)
+    let pris = n(baseData?.pris_forvantning_sek);
+    if (pris == null || !(pris > 0)) {
+      const vTot = n(baseData?.volym_total_m3sk);
+      const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
+      if (vTot != null && vTot > 0) pris = vTot * price_per_m3sk;
+      else pris = 0;
+    }
+
+    const rfdRate = pctToDecMaybe(options?.interest_distribution_rate_pct, 0.0862) ?? 0.0862; // ~8,62 %
     const busTax = pctToDecMaybe(options?.business_tax_effective_pct, 0.45) ?? 0.45;
 
     let loan = (ANALYZERS as any).__last_loan;
@@ -454,7 +512,7 @@ const ANALYZERS = {
     }
     const rest = n(loan?.lan_och_skogskonto?.restskuld_sek) ?? 0;
 
-    const kapitalunderlag = Math.max(0, pris - rest);
+    const kapitalunderlag = Math.max(0, (pris ?? 0) - rest);
     const belopp = kapitalunderlag * rfdRate;
     const sparing = Math.max(0, belopp * (busTax - 0.30)); // indikativ jämfört med näring
 
@@ -473,7 +531,14 @@ const ANALYZERS = {
   forward_cashflow_and_debt: ({ baseData, options }: AnalyzerCtx) => {
     const price_per_m3sk = n(options?.price_per_m3sk) ?? 350;
     const r = pctToDecMaybe(options?.interest_rate_pct, 0.05) ?? 0.05;
-    const pris = n(baseData?.pris_forvantning_sek) ?? 0;
+
+    // Pris (ev. estimerat)
+    let pris = n(baseData?.pris_forvantning_sek);
+    const vTot = n(baseData?.volym_total_m3sk);
+    if (pris == null || !(pris > 0)) {
+      if (vTot != null && vTot > 0) pris = vTot * price_per_m3sk;
+      else pris = 0;
+    }
 
     const bonitet = n(baseData?.bonitet);
     const ha = n(baseData?.skogsmark_ha);
@@ -489,7 +554,7 @@ const ANALYZERS = {
     const rest = n(loan?.lan_och_skogskonto?.restskuld_sek) ?? 0;
 
     const dscrVsGiven = rest > 0 ? (yearlyIncome / (rest * r)) : null;
-    const dscrVsAsk = pris > 0 ? (yearlyIncome / (pris * r)) : null;
+    const dscrVsAsk = (pris ?? 0) > 0 ? (yearlyIncome / ((pris ?? 0) * r)) : null;
     const loanCapacity = r > 0 ? (yearlyIncome / r) : null;
 
     return {
