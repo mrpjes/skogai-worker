@@ -1,164 +1,674 @@
-// src/index.ts
-export interface Env {
-  skogaiR2bucket: R2Bucket;  // måste matcha wrangler.toml binding
-  OPENAI_API_KEY: string;    // sätts som Secret i Cloudflare
-  ACCESS_TOKEN?: string;     // valfritt; för att låsa API med header
-}
-
-const JSON_HDR = { "content-type": "application/json" } as const;
-
-export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
-
-    // --- CORS ---
-    if (req.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-allow-methods": "GET,POST,OPTIONS",
-          "access-control-allow-headers": "content-type,x-access-token",
-        },
-      });
-    }
-
-    // --- Healthcheck ---
-    if (url.pathname === "/health") return new Response("ok", { status: 200 });
-
-    // (valfritt) kräva hemlig header
-    if (env.ACCESS_TOKEN) {
-      const t = req.headers.get("x-access-token");
-      if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
-    }
-
-    // UI
-    if (url.pathname === "/" && req.method === "GET") {
-      return new Response(HTML_PAGE, {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
-    }
-
-    // Upload PDF
-    if (url.pathname === "/upload" && req.method === "POST") {
-      const ct = req.headers.get("content-type") || "";
-      if (!ct.startsWith("application/pdf")) return j({ ok: false, error: "Skicka application/pdf" }, 400);
-      const ab = await req.arrayBuffer();
-      const key = `uploads/${crypto.randomUUID()}.pdf`;
-      await env.skogaiR2bucket.put(key, ab, { httpMetadata: { contentType: "application/pdf" } });
-      return j({ ok: true, key });
-    }
-
-    // TODO: Process endpoint (som du redan har med analyser)
-    // Här kan du klistra in din befintliga kod för /process
-    // Vi lämnar den tom här för fokus på HTML/forest.jpg
-    if (url.pathname === "/process" && req.method === "POST") {
-      return j({ ok: true, msg: "process not implemented in this snippet" });
-    }
-
-    // Hämta PDF från R2
-    if (url.pathname.startsWith("/get/")) {
-      const k = decodeURIComponent(url.pathname.replace("/get/", ""));
-      const o = await env.skogaiR2bucket.get(k);
-      if (!o) return j({ ok: false, error: "Not found" }, 404);
-      return new Response(o.body, {
-        headers: { "content-type": o.httpMetadata?.contentType || "application/pdf" },
-      });
-    }
-
-    // Default
-    return new Response(JSON.stringify({ ok: true, msg: "UI + API running" }), {
-      headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
-    });
-  },
-};
-
-// ---------- Hjälpare ----------
-function j(obj: unknown, status = 200): Response {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
-  });
-}
-
-// ---------- HTML med forest.jpg som bakgrund ----------
-const HTML_PAGE = /* html */ `<!doctype html>
+<!doctype html>
 <html lang="sv">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Vedrik Skog och lite AI</title>
-<style>
-body{margin:0;font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#222}
-header.hero{
-  background:url("/forest.jpg") center/cover no-repeat;
-  color:white;
-  padding:60px 20px;
-  text-align:center;
-}
-header.hero h1{margin:0;font-size:2.5rem;text-shadow:0 2px 6px rgba(0,0,0,0.6)}
-main{max-width:900px;margin:24px auto;padding:0 16px}
-fieldset{border:1px solid #ddd;padding:12px 16px;margin:16px 0;border-radius:8px}
-label{margin-right:14px;display:inline-flex;align-items:center;gap:6px}
-button{padding:10px 14px;border-radius:8px;border:1px solid #bbb;cursor:pointer}
-.bar{height:10px;background:#eee;border-radius:8px;overflow:hidden}
-.bar>div{height:100%;width:0%}
-#upBar{background:#4caf50} #exBar{background:#2196f3}
-pre#out{white-space:pre-wrap;background:#111;color:#eee;padding:12px;border-radius:8px}
-pre#out .raw{color:#555} /* gör raw text svagare */
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vedrik Skog och lite AI</title>
+
+  <!-- PDF.js (legacy för stabilitet i iOS Safari) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.worker.min.js";
+  </script>
+
+  <style>
+    :root{
+      --bg:#0b0f0c;
+      --card:#111613e6;
+      --muted:#a7b0aa;
+      --text:#eef3ef;
+      --accent:#66d28c;
+      --accent-2:#51a8ff;
+      --border:#1d241f;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font:16px/1.45 ui-sans-serif, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-font-smoothing:antialiased;
+    }
+
+    /* Hero */
+    .hero{
+      position:relative;
+      min-height:44vh;
+      display:grid;
+      place-items:end start;
+      padding:32px;
+      background:#0b0f0c url("/forest.jpg") center/cover no-repeat;
+      isolation:isolate;
+    }
+    .hero::after{
+      content:"";
+      position:absolute; inset:0;
+      background:linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 70%, rgba(11,15,12,.9) 100%);
+      z-index:0;
+    }
+    .hero-inner{
+      position:relative; z-index:1;
+      max-width:1100px;
+      width:100%;
+      margin:0 auto;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      font-weight:700; letter-spacing:.3px;
+      margin-bottom:8px; color:#eaf7ef;
+      text-shadow:0 2px 14px rgba(0,0,0,.35);
+    }
+    .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(102,210,140,.18)}
+    h1{
+      margin:0 0 6px 0; font-size:clamp(28px,4vw,40px);
+      line-height:1.1; letter-spacing:.2px;
+      text-shadow:0 2px 14px rgba(0,0,0,.35);
+    }
+    .sub{
+      margin:0; color:#dfe7e1; opacity:.85
+    }
+
+    /* Main container */
+    .wrap{
+      max-width:1100px; margin:-54px auto 80px;
+      padding:0 24px;
+    }
+    .grid{
+      display:grid; gap:18px;
+      grid-template-columns: 1.2fr 1fr;
+    }
+    @media (max-width:980px){ .grid{grid-template-columns:1fr} }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+    .card h3{
+      margin:0 0 6px; font-size:18px; letter-spacing:.2px
+    }
+    .card .hd{
+      padding:14px 16px 0; color:#d9e3dc;
+    }
+    .card .body{ padding:14px 16px 18px }
+    .muted{ color:var(--muted) }
+
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
+    .row > *{ flex: 1 1 auto }
+
+    /* Inputs & buttons */
+    .input, .select, .number, .file{
+      width:100%; padding:10px 12px;
+      border-radius:12px; border:1px solid var(--border);
+      background:#0f140f; color:var(--text);
+      outline:none;
+    }
+    .btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:10px 14px; border-radius:12px; border:1px solid #2a3330;
+      background:#152018; color:#e9f6ee;
+      cursor:pointer; font-weight:600;
+      transition:.18s transform ease, .18s background ease, .18s border-color ease;
+    }
+    .btn:hover{ transform:translateY(-1px); background:#17251b; border-color:#31413a }
+    .btn.primary{ background:var(--accent); border-color:#44b86f; color:#09110c }
+    .btn.primary:hover{ background:#5dd78f }
+    .btn.ghost{ background:#0f130f }
+    .btn.blue{ background:var(--accent-2); border-color:#2b7dd8; color:#071018 }
+    .btn.blue:hover{ background:#59b0ff }
+
+    /* Progress bars */
+    .bar{height:10px;background:#0f130f;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+    .bar > div{height:100%;width:0%}
+    #upBar{background:linear-gradient(90deg,#52d18b,#7de0a8)}
+    #exBar{background:linear-gradient(90deg,#6fa8ff,#91c2ff)}
+
+    /* Output/diag */
+    pre{white-space:pre-wrap; margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    #out{
+      background:#0f130f; border:1px dashed #233027;
+      color:#dfe7e1; border-radius:12px; padding:12px; min-height:120px
+    }
+    details.block{margin-top:12px;border:1px solid #213026;border-radius:8px;background:#0f140f}
+    details.block summary{cursor:pointer;padding:10px 12px;color:#9fb0a6;font-weight:600}
+    details.block pre{margin:0;padding:12px;border-top:1px solid #213026;white-space:pre-wrap;color:#91a198}
+
+    /* KPI + Cards */
+    .kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    @media (max-width:640px){ .kpi{grid-template-columns:1fr} }
+    .kpi .item{background:#0f140f;border:1px solid var(--border);border-radius:12px;padding:10px}
+    .kpi .lbl{font-size:12px;color:var(--muted)}
+    .kpi .val{font-weight:700;font-size:16px;margin-top:2px}
+    .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+    .card2{border:1px solid var(--border);border-radius:12px;background:#0f140f;padding:12px}
+    .card2 h4{margin:0 0 6px}
+    .kv{display:flex;justify-content:space-between;gap:8px}
+  </style>
 </head>
 <body>
-<header class="hero">
-  <h1>Vedrik Skog och lite AI</h1>
-</header>
-<main>
-  <fieldset><legend>1) Ladda upp PDF</legend>
-    <input type="file" id="pdf" accept="application/pdf">
-    <button id="btnUpload">Ladda upp</button>
-    <div>Nyckel: <code id="key"></code></div>
-    <div style="margin:12px 0">
-      <div>Uppladdning: <span id="upPct">0%</span></div>
-      <div class="bar"><div id="upBar"></div></div>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="brand"><span class="dot"></span>Vedrik Skog och lite AI</div>
+      <h1>Snabbvärdera skogsfastighet med PDF-prospekt</h1>
+      <p class="sub">Ladda upp prospektet, extrahera text lokalt, och få grunddata, nyckeltal & lönsamhet.</p>
     </div>
-  </fieldset>
+  </header>
 
-  <fieldset><legend>2) Välj analyser</legend>
-    <label><input type="checkbox" class="an" value="price_metrics" checked> Pris-metrik</label>
-    <label><input type="checkbox" class="an" value="risk" checked> Risk</label>
-    <button id="btnProcess">Kör extraktion + analyser</button>
-  </fieldset>
+  <!-- MAIN -->
+  <main class="wrap">
+    <div class="grid">
 
-  <h3>Resultat</h3>
-  <pre id="out">{ "tips": "1) Ladda upp PDF, 2) Kör analyser" }</pre>
-</main>
+      <!-- Vänster kolumn: Inmatning -->
+      <section class="card">
+        <div class="hd"><h3>1) Inmatning</h3></div>
+        <div class="body">
+          <div class="row">
+            <input id="pdf" class="file" type="file" accept="application/pdf" />
+            <button id="btnUpload" class="btn primary">Ladda upp PDF</button>
+          </div>
 
-<script>
-function out(o){document.getElementById('out').textContent=typeof o==='string'?o:JSON.stringify(o,null,2)}
-function setUploadProgress(p){document.getElementById('upPct').textContent=Math.round(p)+'%';document.getElementById('upBar').style.width=p+'%'}
+          <div class="row" style="margin-top:10px">
+            <span class="pill">Nyckel: <code id="key" style="opacity:.9"></code></span>
+          </div>
 
-function upload(){
-  const f=document.getElementById('pdf').files[0];
-  if(!f){ alert('Välj PDF'); return; }
-  setUploadProgress(0); out('Laddar upp...');
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST','upload',true);
-  xhr.setRequestHeader('Content-Type','application/pdf');
-  xhr.upload.onprogress=e=>{
-    if(e.lengthComputable) setUploadProgress((e.loaded/e.total)*100);
-  };
-  xhr.onload=()=>{out(xhr.responseText)};
-  xhr.send(f);
-}
+          <div style="margin-top:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span class="muted">Uppladdning</span>
+              <span id="upPct" class="muted">0%</span>
+            </div>
+            <div class="bar"><div id="upBar"></div></div>
+          </div>
 
-async function processRun(){
-  const key=document.getElementById('key').textContent.trim(); if(!key) return alert('Ladda upp först');
-  const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
-  const r=await fetch('process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,analyses})});
-  out(await r.json());
-}
+          <div style="margin-top:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span class="muted">Extrahering (PDF.js)</span>
+              <span id="exPct" class="muted">0%</span>
+            </div>
+            <div class="bar"><div id="exBar"></div></div>
+          </div>
 
-document.getElementById('btnUpload').addEventListener('click',upload);
-document.getElementById('btnProcess').addEventListener('click',processRun);
-</script>
+          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+
+          <div class="row">
+            <label class="pill"><input type="checkbox" id="cbSummary" checked
+              style="accent-color:#66d28c; margin-right:8px">Prioritera “Sammanställning över fastigheten”</label>
+            <label class="pill"><input type="checkbox" id="cbEarlyPages" checked
+              style="accent-color:#66d28c; margin-right:8px">Inkludera s.1–3</label>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div>
+              <div class="muted" style="margin-bottom:6px">Min tecken per sida (filtrerar bildsidor)</div>
+              <input id="minChars" class="number" type="number" min="80" max="1000" step="10" value="160" />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px">Sidor att läsa (t.ex. 1-3,5,8-12)</div>
+              <input id="pages" class="input" type="text" placeholder="tomt = auto (s.1–3 + Sammanställning)" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Höger kolumn: Snabböversikt -->
+      <section class="card">
+        <div class="hd"><h3>Snabböversikt</h3></div>
+        <div class="body">
+          <div class="kpi" id="kpiBox">
+            <div class="item"><div class="lbl">Prisidé</div><div class="val" id="kpiPrice">–</div></div>
+            <div class="item"><div class="lbl">Skogsmark (ha)</div><div class="val" id="kpiHa">–</div></div>
+            <div class="item"><div class="lbl">Volym totalt (m³sk)</div><div class="val" id="kpiVol">–</div></div>
+            <div class="item"><div class="lbl">Volym/ha (m³sk/ha)</div><div class="val" id="kpiVha">–</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Analyser & antaganden -->
+      <section class="card" style="grid-column:1/-1">
+        <div class="hd"><h3>2) Analyser & antaganden</h3></div>
+        <div class="body">
+          <div class="row">
+            <!-- Analyser -->
+            <div>
+              <div class="muted" style="margin-bottom:6px">Välj analyser</div>
+              <label><input type="checkbox" class="an" value="summary_pack" checked> Sammanfattning</label>
+              <label><input type="checkbox" class="an" value="key_metrics" checked> Nyckeltal</label>
+              <label><input type="checkbox" class="an" value="initial_harvest_taxed" checked> Initial avverkning (skatt)</label>
+              <label><input type="checkbox" class="an" value="loan_sustainability" checked> Lån & skogskonto</label>
+              <label><input type="checkbox" class="an" value="interest_distribution" checked> Räntefördelning</label>
+              <label><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked> Kassaflöde & DSCR (lean)</label>
+            </div>
+
+            <!-- Antaganden -->
+            <div>
+              <div class="muted" style="margin-bottom:6px">Antaganden</div>
+              <div class="row">
+                <label>Pris (SEK/m³sk): <input type="number" id="price_per_m3sk" class="number" step="1" value="350"></label>
+                <label>Skattesats %: <input type="number" id="tax_rate_pct" class="number" step="0.1" value="30"></label>
+                <label>Skogskontoandel %: <input type="number" id="skogskonto_share_pct" class="number" step="1" value="60"></label>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <label>Låneandel % (av pris): <input type="number" id="loan_share_pct" class="number" step="1" value="100"></label>
+                <label>Ränta %: <input type="number" id="interest_rate_pct" class="number" step="0.01" value="5"></label>
+                <label>Testa lån (SEK): <input type="number" id="loan_amount_sek" class="number" step="1000"></label>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <label>Räntefördelningsränta %: <input type="number" id="interest_distribution_rate_pct" class="number" step="0.01" value="8.62"></label>
+                <label>Eff. näringsskatt %: <input type="number" id="business_tax_effective_pct" class="number" step="0.1" value="45"></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:14px">
+            <button id="btnProcess" class="btn blue">Kör extraktion + analyser</button>
+            <button id="btnExportJSON" class="btn ghost" disabled>Exportera JSON</button>
+            <button id="btnExportCSV" class="btn ghost" disabled>Exportera CSV</button>
+            <button id="btnClear" class="btn ghost" type="button">Rensa</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Resultat -->
+      <section class="card" style="grid-column:1/-1">
+        <div class="hd"><h3>Resultat</h3></div>
+        <div class="body">
+          <div id="cards" class="grid-cards" style="margin-bottom:12px"></div>
+          <pre id="out">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
+
+          <details class="block" style="margin-top:14px">
+            <summary>Extraherad text (nedtonad)</summary>
+            <pre id="rawText">—</pre>
+          </details>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    // ---------- Hjälp ----------
+    const fmt = new Intl.NumberFormat("sv-SE");
+    const fmt2 = new Intl.NumberFormat("sv-SE",{maximumFractionDigits:2});
+    const SEK = v => (v==null||!isFinite(v)) ? "–" : fmt.format(Math.round(v)) + " kr";
+    const NUM = v => (v==null||!isFinite(v)) ? "–" : fmt2.format(v);
+    function setUploadProgress(p){document.getElementById('upPct').textContent=Math.round(p)+'%';document.getElementById('upBar').style.width=p+'%'}
+    function setExtractProgress(p){document.getElementById('exPct').textContent=Math.round(p)+'%';document.getElementById('exBar').style.width=p+'%'}
+    function parsePageSpec(str){
+      if(!str || !str.trim()) return [];
+      const out=[]; for(const part of str.split(',')){
+        const s=part.trim(); if(!s) continue;
+        if(s.includes('-')){ let [a,b]=s.split('-').map(x=>parseInt(x,10));
+          if(Number.isFinite(a)&&Number.isFinite(b)){ if(a>b)[a,b]=[b,a]; for(let i=a;i<=b;i++) out.push(i); }
+        } else { const n=parseInt(s,10); if(Number.isFinite(n)) out.push(n); }
+      }
+      return [...new Set(out)];
+    }
+
+    // ---------- PDF.js extraktion med sammanställningsfokus ----------
+    async function extractTextWithPDFJS(arrayBuf, opts){
+      const { includeEarlyPages=true, minChars=160, pages=[], preferSummary=true } = opts;
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+      const N = pdf.numPages;
+      const want = new Set();
+
+      if(includeEarlyPages){ for(let i=1;i<=Math.min(3,N);i++) want.add(i); }
+      for(const p of pages){ if(p>=1 && p<=N) want.add(p); }
+
+      const summaryHits = [];
+      async function getText(p){
+        const page = await pdf.getPage(p);
+        const tc   = await page.getTextContent();
+        return tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+      }
+
+      if(preferSummary){
+        for(let i=1;i<=N;i++){
+          const t = await getText(i);
+          const lc = t.toLowerCase();
+          if(lc.includes("sammanställning över fastigheten") || lc.includes("sammanställning av fastigheten")){
+            summaryHits.push(i);
+          } else if (lc.includes("sammanställning")) {
+            // markera ändå
+            summaryHits.push(i);
+          }
+          setExtractProgress((i/N)*40);
+          await new Promise(r=>setTimeout(r,0));
+        }
+        summaryHits.slice(0,3).forEach(p=>want.add(p));
+      }
+
+      const ordered = [...want].sort((a,b)=>a-b);
+      const chunks=[];
+      for(let i=0;i<ordered.length;i++){
+        const p = ordered[i];
+        const t = await getText(p);
+        if(t.length >= minChars){ chunks.push(`\n\n[SID ${p}]\n${t}`); }
+        setExtractProgress(40 + ((i+1)/ordered.length)*60);
+        await new Promise(r=>setTimeout(r,0));
+      }
+      return { text: chunks.join("").trim(), pagesUsed: ordered, totalPages: N };
+    }
+
+    function uploadToWorkerWithProgress(file){
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'upload', true);
+        xhr.setRequestHeader('Content-Type', 'application/pdf');
+        xhr.upload.onprogress = (e) => setUploadProgress(e.lengthComputable ? (e.loaded/e.total)*100 : 50);
+        xhr.onload = () => {
+          try { const json = JSON.parse(xhr.responseText || '{}');
+            if (xhr.status>=200 && xhr.status<300 && json.ok) resolve(json);
+            else reject(json);
+          } catch(e){ reject(e); }
+        };
+        xhr.onerror = () => reject(new Error('Nätverksfel vid upload'));
+        xhr.send(file);
+      });
+    }
+
+    // ---------- UI state ----------
+    let LAST_TEXT = "";
+    let LAST_RESP = null;
+
+    // ---------- Handlers ----------
+    async function onUpload(){
+      const f = document.getElementById('pdf').files[0];
+      if(!f){ alert('Välj en PDF först'); return; }
+
+      setUploadProgress(0); setExtractProgress(0);
+      setOut('Laddar upp till R2 ...');
+      let up;
+      try{ up = await uploadToWorkerWithProgress(f); }
+      catch(e){ setOut({ok:false, steg:'upload', error:String(e)}); return; }
+      document.getElementById('key').textContent = up.key;
+
+      try{
+        setOut('Extraherar text lokalt (PDF.js) ...');
+        const opts = {
+          includeEarlyPages: document.getElementById('cbEarlyPages').checked,
+          preferSummary: document.getElementById('cbSummary').checked,
+          minChars: Number(document.getElementById('minChars').value)||160,
+          pages: parsePageSpec(document.getElementById('pages').value)
+        };
+        const ab = await f.arrayBuffer();
+        const { text, pagesUsed, totalPages } = await Promise.race([
+          extractTextWithPDFJS(ab, opts),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
+        ]);
+        LAST_TEXT = text||"";
+        document.getElementById('rawText').textContent = LAST_TEXT || "(tom)";
+        setOut({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
+      }catch(e){
+        LAST_TEXT = "";
+        setExtractProgress(100);
+        setOut({ steg:"upload (ingen lokal text – försök igen)", error:String(e) });
+      }
+    }
+
+    function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
+    function pctToDec(p){ return (p==null) ? null : (p/100); }
+
+    async function onProcess(){
+      const key=document.getElementById('key').textContent.trim(); if(!key){ alert('Ladda upp först'); return; }
+      const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
+
+      const options = {
+        price_per_m3sk: getNum('price_per_m3sk') ?? null,
+        tax_rate_pct: pctToDec(getNum('tax_rate_pct')) ?? 0.30,
+        skogskonto_share_pct: pctToDec(getNum('skogskonto_share_pct')) ?? 0.60,
+        loan_share_pct: pctToDec(getNum('loan_share_pct')) ?? 1.0,
+        interest_rate_pct: pctToDec(getNum('interest_rate_pct')) ?? 0.05,
+        interest_distribution_rate_pct: pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
+        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45,
+        loan_amount_sek: getNum('loan_amount_sek') ?? null
+      };
+
+      setOut('Kör extraktion ...');
+      const r=await fetch('process',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ key, analyses, text: LAST_TEXT || null, options })
+      });
+      const json = await r.json();
+      LAST_RESP = json;
+      setOut(json);
+      renderCards(json);
+      document.getElementById('btnExportJSON').disabled = false;
+      document.getElementById('btnExportCSV').disabled = false;
+      // KPI uppdatering
+      try{
+        const data = json?.data||{};
+        const km = json?.analyses?.key_metrics?.nyckeltal || {};
+        document.getElementById('kpiPrice').textContent = SEK(km?.pris_forvantning_sek ?? data?.pris_forvantning_sek);
+        document.getElementById('kpiHa').textContent    = NUM(data?.skogsmark_ha ?? km?.skogsmark_ha);
+        document.getElementById('kpiVol').textContent   = NUM(data?.volym_total_m3sk ?? km?.volym_total_m3sk);
+        const vha = (data?.volym_per_ha_m3sk!=null)? data.volym_per_ha_m3sk : ((data?.volym_total_m3sk && data?.skogsmark_ha)? data.volym_total_m3sk/data.skogsmark_ha : km?.volym_per_ha_m3sk);
+        document.getElementById('kpiVha').textContent   = NUM(vha);
+      }catch{}
+    }
+
+    function onExportJSON(){
+      if (!LAST_RESP) return;
+      const blob = new Blob([JSON.stringify(LAST_RESP, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a  = document.createElement('a');
+      a.href = url; a.download = 'vedrik-skog-resultat.json';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function flattenForCSV(resp){
+      const sp = resp?.analyses?.summary_pack;
+      const gd = sp?.grunddata ?? resp?.data ?? {};
+      const nk = sp?.nyckeltal ?? resp?.analyses?.key_metrics?.nyckeltal ?? {};
+      const ln = sp?.lonsamhet ?? {};
+      const init = ln.initial_avverkning ?? {};
+      const loan = ln.lan_och_skogskonto ?? {};
+      const idst = ln.rantefordelning ?? {};
+      const fwd  = ln.framot_kassaflode_och_skuldbarande ?? {};
+
+      const row = {
+        fastighetsbeteckning: gd.fastighetsbeteckning ?? gd.fastighet ?? "",
+        kommun: gd.kommun ?? "",
+        areal_total_ha: gd.areal_total_ha ?? "",
+        skogsmark_ha: gd.skogsmark_ha ?? "",
+        volym_total_m3sk: gd.volym_total_m3sk ?? "",
+        volym_per_ha_m3sk: gd.volym_per_ha_m3sk ?? "",
+        bonitet: gd.bonitet ?? "",
+        pris_forvantning_sek: nk.pris_forvantning_sek ?? "",
+        taxeringsvarde_sek: nk.taxeringsvarde_sek ?? "",
+        pris_per_hektar: nk.pris_per_hektar ?? "",
+        pris_per_m3sk: nk.pris_per_m3sk ?? "",
+        tillvaxt_m3sk_per_ar: nk.tillvaxt_m3sk_per_ar ?? "",
+        tillvaxtvarde_sek_per_ar: nk.tillvaxtvarde_sek_per_ar ?? "",
+        kapitaliseringsranta_pct: nk.kapitaliseringsranta_pct ?? "",
+        andel_slutavverkningsbar_pct: nk.andel_slutavverkningsbar_pct ?? "",
+        init_volym_m3sk: init.volym_avverkning_m3sk ?? "",
+        init_brutto_sek: init.bruttointakt_sek ?? "",
+        init_skogsavdrag_sek: init.skogsavdrag_anstalld_sek ?? "",
+        init_skogskonto_insattning_sek: init.skogskonto_insattning_sek ?? "",
+        init_skatt_nu_sek: init.skatt_nu_sek ?? "",
+        init_netto_idag_sek: init.netto_idag_sek ?? "",
+        init_utskjuten_skatt_sek: init.utskjuten_skatt_skogskonto_sek ?? "",
+        init_skogskonto_netto_efter_fr_skatt_sek: init.skogskonto_netto_efter_fr_skatt_sek ?? "",
+        init_skuldnedbetalning_netto_pct: init.skuldnedbetalning_andel_av_pris_netto_pct ?? "",
+        loan_initial_sek: loan.initial_lan_sek ?? "",
+        loan_amortering_netto_sek: loan.amortering_med_netto_sek ?? "",
+        loan_restskuld_sek: loan.restskuld_sek ?? "",
+        loan_arlig_ranta_sek: loan.arlig_ranta_sek ?? "",
+        loan_ar_rante_tackt_av_skogskonto: loan.ar_rante_tackt_av_skogskonto ?? "",
+        idist_kapitalunderlag_sek: idst.kapitalunderlag_sek ?? "",
+        idist_ranta_pct: idst.rantefordelningsranta_pct ?? "",
+        idist_belopp_sek: idst.rantefordelningsbelopp_sek ?? "",
+        idist_skattebesparing_sek: idst.antagen_skattebesparing_vs_naring_sek ?? "",
+        fwd_arlig_tillvaxt_m3sk: fwd.arlig_tillvaxt_m3sk ?? "",
+        fwd_arlig_intakt_sek: fwd.arlig_intakt_sek ?? "",
+        fwd_lanekapacitet_sek: fwd.lanekapacitet_sek ?? "",
+        fwd_dscr_vs_loan: fwd.dscr_vs_given_loan ?? "",
+        fwd_dscr_vs_ask: fwd.dscr_vs_ask_price ?? ""
+      };
+      return [row];
+    }
+
+    function toCSV(rows){
+      if (!rows.length) return "";
+      const headers = Object.keys(rows[0]);
+      const esc = (v) => {
+        if (v === null || v === undefined) return "";
+        const s = String(v).replace(/"/g,'""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+      };
+      const head = headers.join(",");
+      const body = rows.map(r => headers.map(h => esc(r[h])).join(",")).join("\n");
+      return head + "\n" + body;
+    }
+
+    function onExportCSV(){
+      if (!LAST_RESP) return;
+      const rows = flattenForCSV(LAST_RESP);
+      const csv = toCSV(rows);
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a  = document.createElement('a');
+      a.href = url; a.download = 'vedrik-skog-resultat.csv';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function onClear(){
+      document.getElementById('key').textContent = "";
+      document.getElementById('out').textContent = '{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }';
+      document.getElementById('rawText').textContent = "—";
+      setUploadProgress(0); setExtractProgress(0);
+      LAST_TEXT = ""; LAST_RESP = null;
+      document.getElementById('kpiPrice').textContent="–";
+      document.getElementById('kpiHa').textContent="–";
+      document.getElementById('kpiVol').textContent="–";
+      document.getElementById('kpiVha').textContent="–";
+      const file = document.getElementById('pdf'); if(file) file.value = "";
+      document.getElementById('btnExportJSON').disabled = true;
+      document.getElementById('btnExportCSV').disabled = true;
+      document.getElementById('cards').innerHTML = "";
+    }
+
+    function setOut(o){
+      const el = document.getElementById('out');
+      el.textContent = typeof o==='string' ? o : JSON.stringify(o,null,2);
+    }
+
+    // ---------- Cards ----------
+    function kv(label, value){
+      const wrap=document.createElement('div'); wrap.className='kv';
+      const a=document.createElement('span'); a.textContent=label;
+      const b=document.createElement('span'); b.textContent=(typeof value==='number')? (Number.isInteger(value)? fmt.format(value) : fmt2.format(value)) : (value??"–");
+      if(label.toLowerCase().includes("sek") || label.toLowerCase().includes("pris")) b.textContent = SEK(value);
+      wrap.appendChild(a); wrap.appendChild(b); return wrap;
+    }
+
+    function card(title, rows){
+      const c=document.createElement('div'); c.className='card2';
+      const h=document.createElement('h4'); h.textContent=title; c.appendChild(h);
+      rows.forEach(r => c.appendChild(r));
+      return c;
+    }
+
+    function renderCards(resp){
+      const root = document.getElementById('cards'); root.innerHTML="";
+      const data = resp?.data || {};
+      const sp   = resp?.analyses?.summary_pack || {};
+      const km   = resp?.analyses?.key_metrics?.nyckeltal || sp?.nyckeltal || {};
+      const ln   = sp?.lonsamhet || {};
+
+      // Grunddata
+      const gd = sp?.grunddata ?? {
+        fastighetsbeteckning: data.fastighetsbeteckning || data.fastighet || null,
+        kommun: data.kommun ?? null,
+        areal_total_ha: data.areal_total_ha ?? null,
+        skogsmark_ha: data.skogsmark_ha ?? null,
+        volym_total_m3sk: data.volym_total_m3sk ?? null,
+        volym_per_ha_m3sk: data.volym_per_ha_m3sk ?? ((data.volym_total_m3sk && data.skogsmark_ha)? (data.volym_total_m3sk/data.skogsmark_ha): null),
+        bonitet: data.bonitet ?? null,
+        byggnader: data.byggnader ?? null
+      };
+      root.appendChild(card("Grunddata", [
+        kv("Fastighetsbeteckning", gd.fastighetsbeteckning),
+        kv("Kommun", gd.kommun),
+        kv("Areal (ha)", gd.areal_total_ha),
+        kv("Skogsmark (ha)", gd.skogsmark_ha),
+        kv("Volym totalt (m³sk)", gd.volym_total_m3sk),
+        kv("Volym/ha (m³sk/ha)", gd.volym_per_ha_m3sk),
+        kv("Bonitet (m³/ha/år)", gd.bonitet),
+        kv("Byggnader", gd.byggnader?.finns===true ? (gd.byggnader?.typer?.join(", ") || "Ja") : (gd.byggnader?.finns===false ? "Nej" : "Okänt"))
+      ]));
+
+      // Nyckeltal
+      root.appendChild(card("Nyckeltal", [
+        kv("Prisförväntan (SEK)", km.pris_forvantning_sek),
+        kv("Taxeringsvärde (SEK)", km.taxeringsvarde_sek),
+        kv("Pris/ha (SEK/ha)", km.pris_per_hektar),
+        kv("Pris/m³sk (SEK/m³sk)", km.pris_per_m3sk),
+        kv("Tillväxt (m³sk/år)", km.tillvaxt_m3sk_per_ar),
+        kv("Tillväxtvärde (SEK/år)", km.tillvaxtvarde_sek_per_ar),
+        kv("Kapitaliseringsränta (%)", km.kapitaliseringsranta_pct),
+        kv("Andel slutavverkningsbar (%)", km.andel_slutavverkningsbar_pct)
+      ]));
+
+      // Lönsamhet – Initial avverkning
+      const init = ln.initial_avverkning || {};
+      root.appendChild(card("Lönsamhet – Initial avverkning (skatt)", [
+        kv("Volym S1+S2 (m³sk)", init.volym_avverkning_m3sk),
+        kv("Bruttointäkt (SEK)", init.bruttointakt_sek),
+        kv("Skogsavdrag använt (SEK)", init.skogsavdrag_anstalld_sek),
+        kv("Skogskonto insättning (SEK)", init.skogskonto_insattning_sek),
+        kv("Skatt nu (SEK)", init.skatt_nu_sek),
+        kv("Netto idag (SEK)", init.netto_idag_sek),
+        kv("Utskjuten skatt skogskonto (SEK)", init.utskjuten_skatt_skogskonto_sek),
+        kv("Skogskonto netto (efter framtida skatt)", init.skogskonto_netto_efter_fr_skatt_sek),
+        kv("Skuldnedbetalning (% av pris) – netto", init.skuldnedbetalning_andel_av_pris_netto_pct)
+      ]));
+
+      // Lån & Skogskonto – bärighet
+      const loan = ln.lan_och_skogskonto || {};
+      root.appendChild(card("Lån & Skogskonto – bärighet", [
+        kv("Initialt lån (SEK)", loan.initial_lan_sek),
+        kv("Amortering med netto (SEK)", loan.amortering_med_netto_sek),
+        kv("Restskuld (SEK)", loan.restskuld_sek),
+        kv("Årlig ränta (SEK)", loan.arlig_ranta_sek),
+        kv("Skogskonto netto", loan.skogskonto_netto_efter_fr_skatt_sek),
+        kv("År räntor täcks av skogskonto", loan.ar_rante_tackt_av_skogskonto)
+      ]));
+
+      // Räntefördelning
+      const idist = ln.rantefordelning || {};
+      root.appendChild(card("Räntefördelning (positiv)", [
+        kv("Kapitalunderlag (SEK)", idist.kapitalunderlag_sek),
+        kv("Räntefördelningsränta (%)", idist.rantefordelningsranta_pct),
+        kv("Räntefördelningsbelopp (SEK)", idist.rantefordelningsbelopp_sek),
+        kv("Skattebesparing (indikativ, SEK)", idist.antagen_skattebesparing_vs_naring_sek)
+      ]));
+
+      // Kassaflöde & DSCR
+      const fwd = ln.framot_kassaflode_och_skuldbarande || {};
+      root.appendChild(card("Kassaflöde & DSCR (lean)", [
+        kv("Årlig tillväxt (m³sk)", fwd.arlig_tillvaxt_m3sk),
+        kv("Årlig intäkt (SEK)", fwd.arlig_intakt_sek),
+        kv("Lånekapacitet (SEK)", fwd.lanekapacitet_sek),
+        kv("DSCR vs. givet lån", fwd.dscr_vs_given_loan),
+        kv("DSCR vs. prisförväntan", fwd.dscr_vs_ask_price)
+      ]));
+    }
+
+    // ---------- Event bindning ----------
+    document.getElementById('btnUpload').addEventListener('click', onUpload);
+    document.getElementById('btnProcess').addEventListener('click', onProcess);
+    document.getElementById('btnExportJSON').addEventListener('click', onExportJSON);
+    document.getElementById('btnExportCSV').addEventListener('click', onExportCSV);
+    document.getElementById('btnClear').addEventListener('click', onClear);
+  </script>
 </body>
-</html>`;
+</html>
