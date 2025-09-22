@@ -1,466 +1,164 @@
-<!doctype html>
+// src/index.ts
+export interface Env {
+  skogaiR2bucket: R2Bucket;  // måste matcha wrangler.toml binding
+  OPENAI_API_KEY: string;    // sätts som Secret i Cloudflare
+  ACCESS_TOKEN?: string;     // valfritt; för att låsa API med header
+}
+
+const JSON_HDR = { "content-type": "application/json" } as const;
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+
+    // --- CORS ---
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,POST,OPTIONS",
+          "access-control-allow-headers": "content-type,x-access-token",
+        },
+      });
+    }
+
+    // --- Healthcheck ---
+    if (url.pathname === "/health") return new Response("ok", { status: 200 });
+
+    // (valfritt) kräva hemlig header
+    if (env.ACCESS_TOKEN) {
+      const t = req.headers.get("x-access-token");
+      if (t !== env.ACCESS_TOKEN) return new Response("Forbidden", { status: 403 });
+    }
+
+    // UI
+    if (url.pathname === "/" && req.method === "GET") {
+      return new Response(HTML_PAGE, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    // Upload PDF
+    if (url.pathname === "/upload" && req.method === "POST") {
+      const ct = req.headers.get("content-type") || "";
+      if (!ct.startsWith("application/pdf")) return j({ ok: false, error: "Skicka application/pdf" }, 400);
+      const ab = await req.arrayBuffer();
+      const key = `uploads/${crypto.randomUUID()}.pdf`;
+      await env.skogaiR2bucket.put(key, ab, { httpMetadata: { contentType: "application/pdf" } });
+      return j({ ok: true, key });
+    }
+
+    // TODO: Process endpoint (som du redan har med analyser)
+    // Här kan du klistra in din befintliga kod för /process
+    // Vi lämnar den tom här för fokus på HTML/forest.jpg
+    if (url.pathname === "/process" && req.method === "POST") {
+      return j({ ok: true, msg: "process not implemented in this snippet" });
+    }
+
+    // Hämta PDF från R2
+    if (url.pathname.startsWith("/get/")) {
+      const k = decodeURIComponent(url.pathname.replace("/get/", ""));
+      const o = await env.skogaiR2bucket.get(k);
+      if (!o) return j({ ok: false, error: "Not found" }, 404);
+      return new Response(o.body, {
+        headers: { "content-type": o.httpMetadata?.contentType || "application/pdf" },
+      });
+    }
+
+    // Default
+    return new Response(JSON.stringify({ ok: true, msg: "UI + API running" }), {
+      headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
+    });
+  },
+};
+
+// ---------- Hjälpare ----------
+function j(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { ...JSON_HDR, "access-control-allow-origin": "*" },
+  });
+}
+
+// ---------- HTML med forest.jpg som bakgrund ----------
+const HTML_PAGE = /* html */ `<!doctype html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Vedrik Skog och lite AI</title>
-
-  <!-- PDF.js (legacy för stabilitet i iOS Safari) -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.worker.min.js";
-  </script>
-
-  <style>
-    :root{
-      --bg:#0b0f0c;
-      --card:#111613e6;
-      --muted:#a7b0aa;
-      --text:#eef3ef;
-      --accent:#66d28c;
-      --accent-2:#51a8ff;
-      --border:#1d241f;
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
-      --radius:16px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0;
-      font:16px/1.45 ui-sans-serif, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color:var(--text);
-      background:var(--bg);
-      -webkit-font-smoothing:antialiased;
-    }
-
-    /* Hero */
-    .hero{
-      position:relative;
-      min-height:44vh;
-      display:grid;
-      place-items:end start;
-      padding:32px;
-      background:#0b0f0c url("./forest.jpg") center/cover no-repeat;
-      isolation:isolate;
-    }
-    .hero::after{
-      content:"";
-      position:absolute; inset:0;
-      background:linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 70%, rgba(11,15,12,.9) 100%);
-      z-index:0;
-    }
-    .hero-inner{
-      position:relative; z-index:1;
-      max-width:1100px;
-      width:100%;
-      margin:0 auto;
-    }
-    .brand{
-      display:flex; align-items:center; gap:12px;
-      font-weight:700; letter-spacing:.3px;
-      margin-bottom:8px; color:#eaf7ef;
-      text-shadow:0 2px 14px rgba(0,0,0,.35);
-    }
-    .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(102,210,140,.18)}
-    h1{
-      margin:0 0 6px 0; font-size:clamp(28px,4vw,40px);
-      line-height:1.1; letter-spacing:.2px;
-      text-shadow:0 2px 14px rgba(0,0,0,.35);
-    }
-    .sub{
-      margin:0; color:#dfe7e1; opacity:.85
-    }
-
-    /* Main container */
-    .wrap{
-      max-width:1100px; margin:-54px auto 80px;
-      padding:0 24px;
-    }
-    .grid{
-      display:grid; gap:18px;
-      grid-template-columns: 1.2fr 1fr;
-    }
-    @media (max-width:980px){ .grid{grid-template-columns:1fr} }
-
-    .card{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      backdrop-filter: blur(8px);
-    }
-    .card h3{
-      margin:0 0 6px; font-size:18px; letter-spacing:.2px
-    }
-    .card .hd{
-      padding:14px 16px 0; color:#d9e3dc;
-    }
-    .card .body{ padding:14px 16px 18px }
-    .muted{ color:var(--muted) }
-
-    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
-    .row > *{ flex: 1 1 auto }
-
-    /* Inputs & buttons */
-    .input, .select, .number, .file{
-      width:100%; padding:10px 12px;
-      border-radius:12px; border:1px solid var(--border);
-      background:#0f140f; color:var(--text);
-      outline:none;
-    }
-    .btn{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:10px 14px; border-radius:12px; border:1px solid #2a3330;
-      background:#152018; color:#e9f6ee;
-      cursor:pointer; font-weight:600;
-      transition:.18s transform ease, .18s background ease, .18s border-color ease;
-    }
-    .btn:hover{ transform:translateY(-1px); background:#17251b; border-color:#31413a }
-    .btn.primary{ background:var(--accent); border-color:#44b86f; color:#09110c }
-    .btn.primary:hover{ background:#5dd78f }
-    .btn.ghost{ background:#0f130f }
-    .btn.blue{ background:var(--accent-2); border-color:#2b7dd8; color:#071018 }
-    .btn.blue:hover{ background:#59b0ff }
-
-    /* Progress bars */
-    .bar{height:10px;background:#0f130f;border:1px solid var(--border);border-radius:999px;overflow:hidden}
-    .bar > div{height:100%;width:0%}
-    #upBar{background:linear-gradient(90deg,#52d18b,#7de0a8)}
-    #exBar{background:linear-gradient(90deg,#6fa8ff,#91c2ff)}
-
-    /* Output */
-    pre{white-space:pre-wrap; margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    #out{
-      background:#0f130f; border:1px dashed #233027;
-      color:#dfe7e1; border-radius:12px; padding:12px; min-height:120px
-    }
-    details.raw summary{cursor:pointer}
-    details.raw .raw-box{
-      color:#7e877f; background:#0a0e0b; border:1px dashed #202823;
-      border-radius:10px; padding:10px; margin-top:10px; font-size:12.5px
-    }
-    .pill{
-      display:inline-block; font-size:12px; padding:4px 8px; border-radius:999px;
-      border:1px solid #2b3530; background:#0f140f; color:var(--muted)
-    }
-    .kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    @media (max-width:640px){ .kpi{grid-template-columns:1fr} }
-    .kpi .item{background:#0f140f;border:1px solid var(--border);border-radius:12px;padding:10px}
-    .kpi .lbl{font-size:12px;color:var(--muted)}
-    .kpi .val{font-weight:700;font-size:16px;margin-top:2px}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Vedrik Skog och lite AI</title>
+<style>
+body{margin:0;font:16px/1.45 -apple-system,system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#222}
+header.hero{
+  background:url("/forest.jpg") center/cover no-repeat;
+  color:white;
+  padding:60px 20px;
+  text-align:center;
+}
+header.hero h1{margin:0;font-size:2.5rem;text-shadow:0 2px 6px rgba(0,0,0,0.6)}
+main{max-width:900px;margin:24px auto;padding:0 16px}
+fieldset{border:1px solid #ddd;padding:12px 16px;margin:16px 0;border-radius:8px}
+label{margin-right:14px;display:inline-flex;align-items:center;gap:6px}
+button{padding:10px 14px;border-radius:8px;border:1px solid #bbb;cursor:pointer}
+.bar{height:10px;background:#eee;border-radius:8px;overflow:hidden}
+.bar>div{height:100%;width:0%}
+#upBar{background:#4caf50} #exBar{background:#2196f3}
+pre#out{white-space:pre-wrap;background:#111;color:#eee;padding:12px;border-radius:8px}
+pre#out .raw{color:#555} /* gör raw text svagare */
+</style>
 </head>
 <body>
-
-  <!-- HERO -->
-  <header class="hero">
-    <div class="hero-inner">
-      <div class="brand"><span class="dot"></span>Vedrik Skog och lite AI</div>
-      <h1>Snabbvärdera skogsfastighet med PDF-prospekt</h1>
-      <p class="sub">Ladda upp prospektet, extrahera text lokalt, och få grunddata, nyckeltal & lönsamhet.</p>
+<header class="hero">
+  <h1>Vedrik Skog och lite AI</h1>
+</header>
+<main>
+  <fieldset><legend>1) Ladda upp PDF</legend>
+    <input type="file" id="pdf" accept="application/pdf">
+    <button id="btnUpload">Ladda upp</button>
+    <div>Nyckel: <code id="key"></code></div>
+    <div style="margin:12px 0">
+      <div>Uppladdning: <span id="upPct">0%</span></div>
+      <div class="bar"><div id="upBar"></div></div>
     </div>
-  </header>
+  </fieldset>
 
-  <!-- MAIN -->
-  <main class="wrap">
-    <div class="grid">
+  <fieldset><legend>2) Välj analyser</legend>
+    <label><input type="checkbox" class="an" value="price_metrics" checked> Pris-metrik</label>
+    <label><input type="checkbox" class="an" value="risk" checked> Risk</label>
+    <button id="btnProcess">Kör extraktion + analyser</button>
+  </fieldset>
 
-      <!-- Vänster kolumn: Inmatning -->
-      <section class="card">
-        <div class="hd"><h3>1) Inmatning</h3></div>
-        <div class="body">
-          <div class="row">
-            <input id="pdf" class="file" type="file" accept="application/pdf" />
-            <button id="btnUpload" class="btn primary">Ladda upp PDF</button>
-          </div>
+  <h3>Resultat</h3>
+  <pre id="out">{ "tips": "1) Ladda upp PDF, 2) Kör analyser" }</pre>
+</main>
 
-          <div class="row" style="margin-top:10px">
-            <span class="pill">Nyckel: <code id="key" style="opacity:.9"></code></span>
-          </div>
+<script>
+function out(o){document.getElementById('out').textContent=typeof o==='string'?o:JSON.stringify(o,null,2)}
+function setUploadProgress(p){document.getElementById('upPct').textContent=Math.round(p)+'%';document.getElementById('upBar').style.width=p+'%'}
 
-          <div style="margin-top:16px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span class="muted">Uppladdning</span>
-              <span id="upPct" class="muted">0%</span>
-            </div>
-            <div class="bar"><div id="upBar"></div></div>
-          </div>
+function upload(){
+  const f=document.getElementById('pdf').files[0];
+  if(!f){ alert('Välj PDF'); return; }
+  setUploadProgress(0); out('Laddar upp...');
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST','upload',true);
+  xhr.setRequestHeader('Content-Type','application/pdf');
+  xhr.upload.onprogress=e=>{
+    if(e.lengthComputable) setUploadProgress((e.loaded/e.total)*100);
+  };
+  xhr.onload=()=>{out(xhr.responseText)};
+  xhr.send(f);
+}
 
-          <div style="margin-top:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span class="muted">Extrahering (PDF.js)</span>
-              <span id="exPct" class="muted">0%</span>
-            </div>
-            <div class="bar"><div id="exBar"></div></div>
-          </div>
+async function processRun(){
+  const key=document.getElementById('key').textContent.trim(); if(!key) return alert('Ladda upp först');
+  const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
+  const r=await fetch('process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,analyses})});
+  out(await r.json());
+}
 
-          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
-
-          <div class="row">
-            <label class="pill"><input type="checkbox" id="cbSummary" checked
-              style="accent-color:#66d28c; margin-right:8px">Prioritera “Sammanställning över fastigheten”</label>
-            <label class="pill"><input type="checkbox" id="cbEarlyPages" checked
-              style="accent-color:#66d28c; margin-right:8px">Inkludera s.1–3</label>
-          </div>
-
-          <div class="row" style="margin-top:10px">
-            <div>
-              <div class="muted" style="margin-bottom:6px">Min tecken per sida (filtrerar bildsidor)</div>
-              <input id="minChars" class="number" type="number" min="80" max="1000" step="10" value="160" />
-            </div>
-            <div>
-              <div class="muted" style="margin-bottom:6px">Sidor att läsa (t.ex. 1-3,5,8-12)</div>
-              <input id="pages" class="input" type="text" placeholder="tomt = auto (s.1–3 + Sammanställning)" />
-            </div>
-          </div>
-
-          <div class="row" style="margin-top:16px">
-            <button id="btnProcess" class="btn blue">Kör extraktion + analyser</button>
-            <button id="btnClear" class="btn ghost" type="button">Rensa</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Höger kolumn: Snabböversikt -->
-      <section class="card">
-        <div class="hd"><h3>Snabböversikt</h3></div>
-        <div class="body">
-          <div class="kpi" id="kpiBox">
-            <div class="item"><div class="lbl">Prisidé</div><div class="val" id="kpiPrice">–</div></div>
-            <div class="item"><div class="lbl">Skogsmark (ha)</div><div class="val" id="kpiHa">–</div></div>
-            <div class="item"><div class="lbl">Volym totalt (m³sk)</div><div class="val" id="kpiVol">–</div></div>
-            <div class="item"><div class="lbl">Volym/ha (m³sk/ha)</div><div class="val" id="kpiVha">–</div></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Resultat -->
-      <section class="card" style="grid-column:1/-1">
-        <div class="hd"><h3>Resultat</h3></div>
-        <div class="body">
-          <pre id="out">{ tips: "1) Ladda upp PDF, 2) Kör extraktion. Vi läser s.1–3 + Sammanställning." }</pre>
-
-          <details class="raw" style="margin-top:14px">
-            <summary class="muted">Visa råtext (nedtonat)</summary>
-            <div class="raw-box"><pre id="rawText">—</pre></div>
-          </details>
-        </div>
-      </section>
-
-    </div>
-  </main>
-
-  <script>
-    /* ---------- Små hjälpmetoder ---------- */
-    const fmt = new Intl.NumberFormat("sv-SE");
-    const fmtSEK = v => v==null ? "–" : fmt.format(Math.round(v)) + " kr";
-
-    function out(o){
-      const el = document.getElementById('out');
-      el.textContent = typeof o==='string' ? o : JSON.stringify(o,null,2);
-      // uppdatera KPI om möjligt
-      try{
-        const data = (typeof o==='object') ? o : JSON.parse(el.textContent);
-        const base = data?.data || {};
-        const metr = data?.analyses?.key_metrics || {};
-        document.getElementById('kpiPrice').textContent = fmtSEK(metr?.ask_price_sek ?? base?.pris_forvantning_sek);
-        document.getElementById('kpiHa').textContent    = metr?.skogsmark_ha ?? base?.skogsmark_ha ?? "–";
-        document.getElementById('kpiVol').textContent   = metr?.volym_total_m3sk ?? base?.volym_total_m3sk ?? "–";
-        document.getElementById('kpiVha').textContent   = metr?.volym_per_ha_m3sk ?? base?.volym_per_ha_m3sk ?? "–";
-      }catch{}
-    }
-    function setUploadProgress(p){
-      document.getElementById('upPct').textContent = Math.round(p)+'%';
-      document.getElementById('upBar').style.width = p+'%';
-    }
-    function setExtractProgress(p){
-      document.getElementById('exPct').textContent = Math.round(p)+'%';
-      document.getElementById('exBar').style.width = p+'%';
-    }
-
-    function parsePageSpec(str){
-      if(!str || !str.trim()) return [];
-      const out=[];
-      for(const part of str.split(',')){
-        const s=part.trim();
-        if(!s) continue;
-        if(s.includes('-')){
-          let [a,b]=s.split('-').map(x=>parseInt(x,10));
-          if(Number.isFinite(a)&&Number.isFinite(b)){
-            if(a>b) [a,b]=[b,a];
-            for(let i=a;i<=b;i++) out.push(i);
-          }
-        } else {
-          const n=parseInt(s,10);
-          if(Number.isFinite(n)) out.push(n);
-        }
-      }
-      return [...new Set(out)];
-    }
-
-    async function extractTextWithPDFJS(arrayBuf, opts){
-      const { includeEarlyPages=true, minChars=160, pages=[], preferSummary=true } = opts;
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-      const N = pdf.numPages;
-      const want = new Set();
-
-      if(includeEarlyPages){ for(let i=1;i<=Math.min(3,N);i++) want.add(i); }
-      for(const p of pages){ if(p>=1 && p<=N) want.add(p); }
-
-      // grovheuristik för “Sammanställning” (svenska ord)
-      const summaryHits = [];
-      const collect = async (p) => {
-        const page = await pdf.getPage(p);
-        const tc = await page.getTextContent();
-        const t = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
-        return t;
-      };
-
-      // skanna lite för sammanställning om vi ska försöka
-      if(preferSummary){
-        const probe = [];
-        for(let i=1;i<=N;i++){
-          const t = await collect(i);
-          const lc = t.toLowerCase();
-          if(lc.includes("sammanställning över fastigheten") || lc.includes("sammanställning av fastigheten")){
-            summaryHits.push(i);
-          }else if(lc.includes("sammanställning")){
-            probe.push([i,t.length]);
-          }
-          // lätt filter – spara sidor med mycket text
-          if(t.length >= minChars) ; else continue;
-        }
-        if(summaryHits.length){
-          summaryHits.slice(0,3).forEach(p=>want.add(p));
-        }else if(probe.length){
-          // ta de 2 mest texttunga “sammanställnings”-träffarna
-          probe.sort((a,b)=>b[1]-a[1]);
-          probe.slice(0,2).forEach(([p])=>want.add(p));
-        }
-      }
-
-      // om användaren angivit sidor – läs dem
-      if(pages.length){ pages.forEach(p=>want.add(p)); }
-
-      const ordered = [...want].sort((a,b)=>a-b);
-      const texts = [];
-      for(let i=0;i<ordered.length;i++){
-        const p = ordered[i];
-        const t = await collect(p);
-        if(t.length >= minChars){
-          texts.push(`\n\n[SID ${p}]\n${t}`);
-        }
-        setExtractProgress(((i+1)/ordered.length)*100);
-        await new Promise(r=>setTimeout(r,0));
-      }
-      return { text: texts.join("").trim(), pagesUsed: ordered, totalPages: N };
-    }
-
-    function uploadToWorkerWithProgress(file){
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'upload', true);
-        xhr.setRequestHeader('Content-Type', 'application/pdf');
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setUploadProgress((e.loaded/e.total)*100);
-          else setUploadProgress(50);
-        };
-        xhr.onload = () => {
-          try {
-            const json = JSON.parse(xhr.responseText || '{}');
-            if (xhr.status>=200 && xhr.status<300 && json.ok) resolve(json);
-            else reject(json);
-          } catch(e){ reject(e); }
-        };
-        xhr.onerror = () => reject(new Error('Nätverksfel vid upload'));
-        xhr.send(file);
-      });
-    }
-
-    /* ---------- UI handlers ---------- */
-    let LAST_TEXT = "";
-
-    async function onUpload(){
-      const f = document.getElementById('pdf').files[0];
-      if(!f){ alert('Välj en PDF först'); return; }
-
-      setUploadProgress(0); setExtractProgress(0);
-      out('Laddar upp till R2 ...');
-      let up;
-      try{
-        up = await uploadToWorkerWithProgress(f);
-      }catch(e){
-        out({ok:false, steg:"upload", error:String(e)});
-        return;
-      }
-      document.getElementById('key').textContent = up.key;
-
-      try{
-        out('Extraherar text lokalt (PDF.js) ...');
-        const opts = {
-          includeEarlyPages: document.getElementById('cbEarlyPages').checked,
-          preferSummary: document.getElementById('cbSummary').checked,
-          minChars: Number(document.getElementById('minChars').value)||160,
-          pages: parsePageSpec(document.getElementById('pages').value)
-        };
-        const ab = await f.arrayBuffer();
-        const { text, pagesUsed, totalPages } = await Promise.race([
-          extractTextWithPDFJS(ab, opts),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
-        ]);
-        LAST_TEXT = text||"";
-        document.getElementById('rawText').textContent = LAST_TEXT || "(tom)";
-        out({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
-      }catch(e){
-        LAST_TEXT = "";
-        setExtractProgress(100);
-        out({ steg:"upload (ingen lokal text, använder slice-fallback EJ AKTIVERAD)", error:String(e) });
-      }
-    }
-
-    async function onProcess(){
-      const key = document.getElementById('key').textContent.trim();
-      if(!key){ alert('Ladda upp först'); return; }
-
-      const analyses = ["key_metrics","initial_harvest_taxed","loan_sustainability"];
-      const options = {}; // håll tomt i MVP om du vill
-      const pagesNote = (document.getElementById('pages').value||"").trim() || "auto";
-      const focusHint = document.getElementById('cbSummary').checked
-        ? "Fokusera extra på avsnittet 'Sammanställning över fastigheten'."
-        : "";
-
-      out('Kör extraktion ...');
-      const r = await fetch('process', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          key, analyses, options,
-          text: LAST_TEXT || null,
-          pages: pagesNote,
-          focus_hint: focusHint
-        })
-      });
-      out(await r.json());
-    }
-
-    function onClear(){
-      document.getElementById('key').textContent = "";
-      document.getElementById('out').textContent = "{ tips: \"1) Ladda upp PDF, 2) Kör extraktion.\" }";
-      document.getElementById('rawText').textContent = "—";
-      setUploadProgress(0); setExtractProgress(0);
-      LAST_TEXT = "";
-      document.getElementById('kpiPrice').textContent="–";
-      document.getElementById('kpiHa').textContent="–";
-      document.getElementById('kpiVol').textContent="–";
-      document.getElementById('kpiVha').textContent="–";
-      const file = document.getElementById('pdf');
-      if(file) file.value = "";
-    }
-
-    document.getElementById('btnUpload').addEventListener('click', onUpload);
-    document.getElementById('btnProcess').addEventListener('click', onProcess);
-    document.getElementById('btnClear').addEventListener('click', onClear);
-  </script>
+document.getElementById('btnUpload').addEventListener('click',upload);
+document.getElementById('btnProcess').addEventListener('click',processRun);
+</script>
 </body>
-</html>
+</html>`;
