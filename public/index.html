@@ -21,7 +21,7 @@
       --text:#eef3ef;
       --accent:#66d28c;      /* grön */
       --accent-2:#51a8ff;    /* blå */
-      --accent-3:#f2b94c;    /* amber för varningar */
+      --accent-3:#f2b94c;    /* amber */
       --border:#1d241f;
       --shadow:0 12px 40px rgba(0,0,0,.35);
       --radius:16px;
@@ -39,26 +39,31 @@
     /* Hero */
     .hero{
       position:relative;
-      min-height:40vh;
+      min-height:26vh;           /* mindre luft i överkant */
       display:grid;
-      place-items:end start;
-      padding:32px;
+      place-items:start start;   /* texten högre upp */
+      padding:16px 24px;         /* kompaktare padding */
       background:#0b0f0c url("/forest.jpg") center/cover no-repeat;
       isolation:isolate;
     }
     .hero::after{
       content:""; position:absolute; inset:0;
-      background:linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 70%, rgba(11,15,12,.92) 100%);
+      background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.45) 60%, rgba(11,15,12,.9) 100%);
       z-index:0;
     }
     .hero-inner{ position:relative; z-index:1; max-width:1200px; width:100%; margin:0 auto; }
-    .brand{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.3px; color:#eaf7ef; margin-bottom:6px; text-shadow:0 2px 14px rgba(0,0,0,.35); }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.3px; color:#eaf7ef; margin-bottom:4px; text-shadow:0 2px 14px rgba(0,0,0,.35); }
     .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(102,210,140,.18)}
-    h1{ margin:0 0 6px 0; font-size:clamp(28px,4vw,42px); line-height:1.1; text-shadow:0 2px 14px rgba(0,0,0,.35); }
+    h1{ margin:0 0 4px 0; font-size:clamp(26px,4vw,40px); line-height:1.1; text-shadow:0 2px 14px rgba(0,0,0,.35); }
     .sub{ margin:0; color:#dfe7e1; opacity:.9 }
 
     /* Main layout */
-    .wrap{ max-width:1200px; margin:-56px auto 80px; padding:0 24px; display:grid; grid-template-columns: 1.05fr 1.4fr; gap:18px; }
+    .wrap{
+      max-width:1200px;
+      margin:-36px auto 72px;    /* drar upp innehållet lite */
+      padding:0 24px;
+      display:grid; grid-template-columns: 1.05fr 1.4fr; gap:18px;
+    }
     @media (max-width:1020px){ .wrap{ grid-template-columns:1fr; } }
 
     .panel{
@@ -67,12 +72,15 @@
       backdrop-filter: blur(8px);
       padding:16px;
     }
+    @media (min-width:1020px){
+      aside.panel{ position:sticky; top:16px; align-self:start; height:fit-content; }
+    }
 
     /* Stepper */
     .stepper{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px }
     .step{
       display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#0f140f;
-      color:#dfe7e1; font-weight:600; opacity:.8;
+      color:#dfe7e1; font-weight:600; opacity:.85;
     }
     .step.active{ background:#152018; border-color:#2c3a33; opacity:1 }
     .step.done{ background:#13261a; border-color:#2f5b40; }
@@ -81,7 +89,7 @@
 
     /* Cards + common */
     .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); }
-    .card .hd{ padding:14px 16px 0; color:#d9e3dc; }
+    .card .hd{ padding:14px 16px 0; color:#d9e3dc; display:flex; align-items:center; justify-content:space-between; gap:8px;}
     .card .bd{ padding:14px 16px 18px }
     .muted{ color:var(--muted) }
     .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end }
@@ -104,8 +112,8 @@
     .btn.ghost{ background:#0f130f }
     .btn.blue{ background:var(--accent-2); border-color:#2b7dd8; color:#071018 }
     .btn.blue:hover{ background:#59b0ff }
-    .btn.warning{ background:var(--accent-3); border-color:#e0a93e; color:#1a1203 }
 
+    /* Progress bars */
     .bar{height:10px;background:#0f130f;border:1px solid var(--border);border-radius:999px;overflow:hidden}
     .bar>div{height:100%;width:0%}
     #upBar{background:linear-gradient(90deg,#52d18b,#7de0a8)}
@@ -117,12 +125,29 @@
     .kpi .item{background:#0f140f;border:1px solid var(--border);border-radius:12px;padding:12px}
     .kpi .lbl{font-size:12px;color:var(--muted)}
     .kpi .val{font-weight:800;font-size:18px;margin-top:2px}
+    .kpi .val.good{ color:#66d28c; }
+    .kpi .val.warn{ color:#f2b94c; }
+    .kpi .val.bad{  color:#ff7a7a; }
+    .badge-small{
+      display:inline-block; font-size:11px; padding:2px 6px; border-radius:999px;
+      border:1px solid #284133; margin-left:6px; background:#13261a; color:#b8e5c9;
+    }
+
     .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
     .card2{border:1px solid var(--border);border-radius:12px;background:#0f140f;padding:12px}
-    .card2 h4{margin:0 0 6px}
+    .card2 h4{margin:0 0 6px; cursor:pointer; user-select:none; }
+    .card2 .content{ display:none; }
+    .card2.open .content{ display:block; }
     .kv{display:flex;justify-content:space-between;gap:8px}
+
+    /* Logg */
     pre{white-space:pre-wrap;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    #out{background:#0f130f;border:1px dashed #233027;color:#dfe7e1;border-radius:12px;padding:12px;min-height:120px}
+    #out{background:#0f130f;border:1px dashed #233027;color:#dfe7e1;border-radius:12px;padding:12px;min-height:120px;max-height:360px;overflow:auto;position:relative}
+    #out.collapsed{ max-height:180px; }
+    #out.collapsed::after{
+      content:""; position:absolute; left:0; right:0; bottom:0; height:56px;
+      background: linear-gradient(180deg, rgba(15,19,15,0), #0f130f 60%);
+    }
     details.block{margin-top:12px;border:1px solid #213026;border-radius:8px;background:#0f140f}
     details.block summary{cursor:pointer;padding:10px 12px;color:#9fb0a6;font-weight:600}
     details.block pre{margin:0;padding:12px;border-top:1px solid #213026;color:#91a198}
@@ -213,18 +238,31 @@
             <div>
               <div class="muted" style="margin-bottom:6px">Antaganden</div>
               <div class="row">
-                <label>Pris (SEK/m³sk)<input type="number" id="price_per_m3sk" class="number" step="1" value="350"></label>
-                <label>Skattesats %<input type="number" id="tax_rate_pct" class="number" step="0.1" value="30"></label>
-                <label>Skogskontoandel %<input type="number" id="skogskonto_share_pct" class="number" step="1" value="60"></label>
+                <label>Pris (SEK/m³sk)
+                  <input type="number" id="price_per_m3sk" class="number" step="1" value="350">
+                </label>
+                <label>Skattesats %
+                  <input type="number" id="tax_rate_pct" class="number" step="0.1" value="30">
+                </label>
+                <label>Skogskontoandel %
+                  <input type="number" id="skogskonto_share_pct" class="number" step="1" value="60">
+                </label>
               </div>
               <div class="row" style="margin-top:6px">
-                <label>Låneandel %<input type="number" id="loan_share_pct" class="number" step="1" value="100"></label>
-                <label>Ränta %<input type="number" id="interest_rate_pct" class="number" step="0.01" value="5"></label>
-                <label>Testa lån (SEK)<input type="number" id="loan_amount_sek" class="number" step="1000"></label>
+                <label>Låneandel %
+                  <input type="number" id="loan_share_pct" class="number" step="1" value="100">
+                </label>
+                <label>Ränta %
+                  <input type="number" id="interest_rate_pct" class="number" step="0.01" value="5">
+                </label>
               </div>
               <div class="row" style="margin-top:6px">
-                <label>Räntefördelningsränta %<input type="number" id="interest_distribution_rate_pct" class="number" step="0.01" value="8.62"></label>
-                <label>Eff. näringsskatt %<input type="number" id="business_tax_effective_pct" class="number" step="0.1" value="45"></label>
+                <label>Räntefördelningsränta %
+                  <input type="number" id="interest_distribution_rate_pct" class="number" step="0.01" value="8.62">
+                </label>
+                <label>Eff. näringsskatt %
+                  <input type="number" id="business_tax_effective_pct" class="number" step="0.1" value="45">
+                </label>
               </div>
             </div>
           </div>
@@ -234,6 +272,14 @@
             <button id="btnExportJSON" class="btn ghost" disabled>Exportera JSON</button>
             <button id="btnExportCSV" class="btn ghost" disabled>Exportera CSV</button>
           </div>
+
+          <!-- Presets -->
+          <div class="row" style="margin-top:8px">
+            <input id="presetName" class="input" placeholder="Namn på preset (t.ex. Bas 2025-Q3)">
+            <button id="btnSavePreset" class="btn">Spara preset</button>
+            <select id="presetSelect" class="input"></select>
+            <button id="btnLoadPreset" class="btn ghost">Ladda preset</button>
+          </div>
         </div>
       </section>
     </aside>
@@ -241,7 +287,10 @@
     <!-- RIGHT: Results & dashboard -->
     <section class="panel">
       <section class="card">
-        <div class="hd"><h3>Snabböversikt</h3></div>
+        <div class="hd">
+          <h3 style="margin:0">Snabböversikt</h3>
+          <div id="confWrap"></div>
+        </div>
         <div class="bd">
           <div class="kpi" id="kpiBox">
             <div class="item"><div class="lbl">Prisidé</div><div class="val" id="kpiPrice">–</div></div>
@@ -253,10 +302,14 @@
       </section>
 
       <section class="card" style="margin-top:12px">
-        <div class="hd"><h3>Resultat & logg</h3></div>
+        <div class="hd"><h3 style="margin:0">Resultat & logg</h3></div>
         <div class="bd">
           <div id="cards" class="grid-cards" style="margin-bottom:12px"></div>
-          <pre id="out">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
+          <pre id="out" class="collapsed">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px">
+            <button id="btnToggleLog" class="btn ghost">Visa mer</button>
+            <button id="btnCopyJSON" class="btn ghost">Kopiera JSON</button>
+          </div>
 
           <details class="block" style="margin-top:14px">
             <summary>Extraherad text (nedtonad)</summary>
@@ -287,7 +340,16 @@
       return [...new Set(out)];
     }
 
-    // ---------- PDF.js extraktion med sammanställningsfokus ----------
+    // KPI färg (enkla trösklar)
+    function setKpiClass(el, val, goodHigh=true, t1=1, t2=0.7){
+      el.classList.remove('good','warn','bad');
+      const n = Number(val);
+      if(!isFinite(n)) return;
+      const a = goodHigh ? n : -n;
+      el.classList.add(a>t1 ? 'good' : a>t2 ? 'warn' : 'bad');
+    }
+
+    // ---------- PDF.js extraktion ----------
     async function extractTextWithPDFJS(arrayBuf, opts){
       const { includeEarlyPages=true, minChars=160, pages=[], preferSummary=true } = opts;
       const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
@@ -351,8 +413,8 @@
     // ---------- UI state ----------
     let LAST_TEXT = "";
     let LAST_RESP = null;
+    let LAST_PAGES = 0;
 
-    // ---------- Helpers ----------
     function setOut(o){
       out.textContent = typeof o==='string' ? o : JSON.stringify(o,null,2);
     }
@@ -363,8 +425,6 @@
         el.classList.toggle('done', i<activeIdx);
       });
     }
-    function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
-    function pctToDec(p){ return (p==null) ? null : (p/100); }
 
     // ---------- Cards ----------
     function kv(label, value){
@@ -376,10 +436,13 @@
       if(ll.includes("sek") || ll.includes("pris")) b.textContent = SEK(value);
       wrap.appendChild(a); wrap.appendChild(b); return wrap;
     }
-    function card(title, rows){
-      const c=document.createElement('div'); c.className='card2';
+    function collapsibleCard(title, rows, open=false){
+      const c=document.createElement('div'); c.className='card2' + (open?' open':'');
       const h=document.createElement('h4'); h.textContent=title; c.appendChild(h);
-      rows.forEach(r => c.appendChild(r));
+      const wrap=document.createElement('div'); wrap.className='content';
+      rows.forEach(r=>wrap.appendChild(r));
+      c.appendChild(wrap);
+      h.addEventListener('click', ()=> c.classList.toggle('open'));
       return c;
     }
     function renderCards(resp){
@@ -400,7 +463,7 @@
         bonitet: data.bonitet ?? null,
         byggnader: data.byggnader ?? null
       };
-      root.appendChild(card("Grunddata", [
+      root.appendChild(collapsibleCard("Grunddata", [
         kv("Fastighetsbeteckning", gd.fastighetsbeteckning),
         kv("Kommun", gd.kommun),
         kv("Areal (ha)", gd.areal_total_ha),
@@ -409,10 +472,10 @@
         kv("Volym/ha (m³sk/ha)", gd.volym_per_ha_m3sk),
         kv("Bonitet (m³/ha/år)", gd.bonitet),
         kv("Byggnader", gd.byggnader?.finns===true ? (gd.byggnader?.typer?.join(", ") || "Ja") : (gd.byggnader?.finns===false ? "Nej" : "Okänt"))
-      ]));
+      ], true));
 
       // Nyckeltal
-      root.appendChild(card("Nyckeltal", [
+      root.appendChild(collapsibleCard("Nyckeltal", [
         kv("Prisförväntan (SEK)", km.pris_forvantning_sek),
         kv("Taxeringsvärde (SEK)", km.taxeringsvarde_sek),
         kv("Pris/ha (SEK/ha)", km.pris_per_hektar),
@@ -425,7 +488,7 @@
 
       // Lönsamhet – Initial avverkning
       const init = ln.initial_avverkning || {};
-      root.appendChild(card("Lönsamhet – Initial avverkning (skatt)", [
+      root.appendChild(collapsibleCard("Lönsamhet – Initial avverkning (skatt)", [
         kv("Volym S1+S2 (m³sk)", init.volym_avverkning_m3sk),
         kv("Bruttointäkt (SEK)", init.bruttointakt_sek),
         kv("Skogsavdrag använt (SEK)", init.skogsavdrag_anstalld_sek),
@@ -439,7 +502,7 @@
 
       // Lån & Skogskonto – bärighet
       const loan = ln.lan_och_skogskonto || {};
-      root.appendChild(card("Lån & Skogskonto – bärighet", [
+      root.appendChild(collapsibleCard("Lån & Skogskonto – bärighet", [
         kv("Initialt lån (SEK)", loan.initial_lan_sek),
         kv("Amortering med netto (SEK)", loan.amortering_med_netto_sek),
         kv("Restskuld (SEK)", loan.restskuld_sek),
@@ -450,7 +513,7 @@
 
       // Räntefördelning
       const idist = ln.rantefordelning || {};
-      root.appendChild(card("Räntefördelning (positiv)", [
+      root.appendChild(collapsibleCard("Räntefördelning (positiv)", [
         kv("Kapitalunderlag (SEK)", idist.kapitalunderlag_sek),
         kv("Räntefördelningsränta (%)", idist.rantefordelningsranta_pct),
         kv("Räntefördelningsbelopp (SEK)", idist.rantefordelningsbelopp_sek),
@@ -459,7 +522,7 @@
 
       // Kassaflöde & DSCR
       const fwd = ln.framot_kassaflode_och_skuldbarande || {};
-      root.appendChild(card("Kassaflöde & DSCR (lean)", [
+      root.appendChild(collapsibleCard("Kassaflöde & DSCR (lean)", [
         kv("Årlig tillväxt (m³sk)", fwd.arlig_tillvaxt_m3sk),
         kv("Årlig intäkt (SEK)", fwd.arlig_intakt_sek),
         kv("Lånekapacitet (SEK)", fwd.lanekapacitet_sek),
@@ -494,8 +557,17 @@
           new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
         ]);
         LAST_TEXT = text||"";
+        LAST_PAGES = (pagesUsed||[]).length;
         rawText.textContent = LAST_TEXT || "(tom)";
         setOut({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
+
+        // Confidence badge
+        const chars = (LAST_TEXT||"").length;
+        const hasSummary = /sammanställning/i.test(LAST_TEXT);
+        const conf = Math.max(0, Math.min(1, (chars/Math.max(1,LAST_PAGES*1200)) * (hasSummary?1.2:1.0)));
+        const wrap = document.getElementById('confWrap');
+        wrap.innerHTML = `<span class="badge-small">Confidence: ${(conf*100|0)}%</span>`;
+
         setStep(1);
       }catch(e){
         LAST_TEXT = "";
@@ -503,6 +575,9 @@
         setOut({ steg:"upload (ingen lokal text – försök igen)", error:String(e) });
       }
     }
+
+    function pctToDec(p){ return (p==null) ? null : (p/100); }
+    function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
 
     async function onProcess(){
       const k=key.textContent.trim(); if(!k){ alert('Ladda upp först'); return; }
@@ -514,8 +589,7 @@
         loan_share_pct: pctToDec(getNum('loan_share_pct')) ?? 1.0,
         interest_rate_pct: pctToDec(getNum('interest_rate_pct')) ?? 0.05,
         interest_distribution_rate_pct: pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
-        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45,
-        loan_amount_sek: getNum('loan_amount_sek') ?? null
+        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45
       };
 
       setOut('Kör extraktion ...');
@@ -538,8 +612,12 @@
         kpiPrice.textContent = SEK(km?.pris_forvantning_sek ?? data?.pris_forvantning_sek);
         kpiHa.textContent    = NUM(data?.skogsmark_ha ?? km?.skogsmark_ha);
         kpiVol.textContent   = NUM(data?.volym_total_m3sk ?? km?.volym_total_m3sk);
-        const vha = (data?.volym_per_ha_m3sk!=null)? data.volym_per_ha_m3sk : ((data?.volym_total_m3sk && data?.skogsmark_ha)? data.volym_total_m3sk/data.skogsmark_ha : km?.volym_per_ha_m3sk);
+        const vha = (data?.volym_per_ha_m3sk!=null)? data.volym_per_ha_m3sk :
+                    ((data?.volym_total_m3sk && data?.skogsmark_ha)? data.volym_total_m3sk/data.skogsmark_ha : km?.volym_per_ha_m3sk);
         kpiVha.textContent   = NUM(vha);
+
+        // enkel färg för volym/ha (exempeltrösklar)
+        setKpiClass(kpiVha, parseFloat(String(vha).replace(',','.')), true, 220, 180);
       }catch{}
       setStep(2);
     }
@@ -618,7 +696,6 @@
       const body = rows.map(r => headers.map(h => esc(r[h])).join(",")).join("\n");
       return head + "\n" + body;
     }
-
     function onExportCSV(){
       if (!LAST_RESP) return;
       const rows = flattenForCSV(LAST_RESP);
@@ -635,13 +712,51 @@
       setOut('{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }');
       rawText.textContent = "—";
       setUploadProgress(0); setExtractProgress(0);
-      LAST_TEXT = ""; LAST_RESP = null;
+      LAST_TEXT = ""; LAST_RESP = null; LAST_PAGES = 0;
       kpiPrice.textContent="–"; kpiHa.textContent="–"; kpiVol.textContent="–"; kpiVha.textContent="–";
       if(pdf) pdf.value = "";
       btnExportJSON.disabled = true; btnExportCSV.disabled = true;
       cards.innerHTML = "";
+      confWrap.innerHTML = "";
       setStep(0);
     }
+
+    // ---------- Presets (localStorage) ----------
+    const FIELDS = [
+      'price_per_m3sk','tax_rate_pct','skogskonto_share_pct',
+      'loan_share_pct','interest_rate_pct',
+      'interest_distribution_rate_pct','business_tax_effective_pct'
+    ];
+    function readAssumptions(){
+      const o={}; FIELDS.forEach(id=>o[id]=document.getElementById(id).value);
+      return o;
+    }
+    function writeAssumptions(o){
+      FIELDS.forEach(id=>{
+        if(o[id]!=null) document.getElementById(id).value = o[id];
+      });
+    }
+    function loadPresetList(){
+      const sel = document.getElementById('presetSelect');
+      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
+      sel.innerHTML='';
+      Object.keys(data).forEach(name=>{
+        const opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt);
+      });
+    }
+    btnSavePreset.addEventListener('click', ()=>{
+      const name = presetName.value.trim(); if(!name) return alert('Ange namn');
+      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
+      data[name]=readAssumptions();
+      localStorage.setItem('vedrik_presets', JSON.stringify(data));
+      loadPresetList();
+    });
+    btnLoadPreset.addEventListener('click', ()=>{
+      const name = presetSelect.value; if(!name) return;
+      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
+      if(data[name]) writeAssumptions(data[name]);
+    });
+    document.addEventListener('DOMContentLoaded', loadPresetList);
 
     // ---------- Bind ----------
     btnUpload.addEventListener('click', onUpload);
@@ -649,6 +764,19 @@
     btnExportJSON.addEventListener('click', onExportJSON);
     btnExportCSV.addEventListener('click', onExportCSV);
     btnClear.addEventListener('click', onClear);
+
+    // Logg UI
+    btnToggleLog.addEventListener('click', ()=>{
+      out.classList.toggle('collapsed');
+      btnToggleLog.textContent = out.classList.contains('collapsed') ? 'Visa mer' : 'Visa mindre';
+    });
+    btnCopyJSON.addEventListener('click', async ()=>{
+      try{
+        await navigator.clipboard.writeText(out.textContent);
+        btnCopyJSON.textContent = 'Kopierat!';
+        setTimeout(()=>btnCopyJSON.textContent='Kopiera JSON',1200);
+      }catch{}
+    });
 
     // quick refs
     const upPct = document.getElementById('upPct');
