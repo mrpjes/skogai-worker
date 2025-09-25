@@ -19,9 +19,9 @@
       --card:#111613e6;
       --muted:#a7b0aa;
       --text:#eef3ef;
-      --accent:#66d28c;      /* grön */
-      --accent-2:#51a8ff;    /* blå */
-      --accent-3:#f2b94c;    /* amber */
+      --accent:#66d28c;
+      --accent-2:#51a8ff;
+      --accent-3:#f2b94c;
       --border:#1d241f;
       --shadow:0 12px 40px rgba(0,0,0,.35);
       --radius:16px;
@@ -98,7 +98,7 @@
     /* Inputs & buttons */
     .input, .number, .file{
       width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border);
-      background:#0f140f; color:var(--text); outline:none;
+      background:#0f140f; color:#fff; outline:none;
     }
     .checkbox{ display:flex; align-items:center; gap:8px; }
     .btn{
@@ -148,6 +148,7 @@
       content:""; position:absolute; left:0; right:0; bottom:0; height:56px;
       background: linear-gradient(180deg, rgba(15,19,15,0), #0f130f 60%);
     }
+    .errbox{margin-top:10px;border:1px solid #4a2a2a;background:#1a0f0f;border-radius:10px;padding:10px;color:#ffb3b3}
     details.block{margin-top:12px;border:1px solid #213026;border-radius:8px;background:#0f140f}
     details.block summary{cursor:pointer;padding:10px 12px;color:#9fb0a6;font-weight:600}
     details.block pre{margin:0;padding:12px;border-top:1px solid #213026;color:#91a198}
@@ -306,6 +307,7 @@
         <div class="bd">
           <div id="cards" class="grid-cards" style="margin-bottom:12px"></div>
           <pre id="out" class="collapsed">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
+          <div id="err" class="errbox" style="display:none"></div>
           <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px">
             <button id="btnToggleLog" class="btn ghost">Visa mer</button>
             <button id="btnCopyJSON" class="btn ghost">Kopiera JSON</button>
@@ -537,7 +539,7 @@
       if(!f){ alert('Välj en PDF först'); return; }
       setStep(0);
       setUploadProgress(0); setExtractProgress(0);
-      setOut('Laddar upp till R2 ...');
+      setOut('Laddar upp till R2 ...'); err.style.display='none'; err.textContent='';
       let up;
       try{ up = await uploadToWorkerWithProgress(f); }
       catch(e){ setOut({ok:false, steg:'upload', error:String(e)}); return; }
@@ -582,6 +584,7 @@
     async function onProcess(){
       const k=key.textContent.trim(); if(!k){ alert('Ladda upp först'); return; }
       const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
+      // Viktigt: skicka loan_amount_sek: null för backend-kompatibilitet
       const options = {
         price_per_m3sk: getNum('price_per_m3sk') ?? null,
         tax_rate_pct: pctToDec(getNum('tax_rate_pct')) ?? 0.30,
@@ -589,10 +592,11 @@
         loan_share_pct: pctToDec(getNum('loan_share_pct')) ?? 1.0,
         interest_rate_pct: pctToDec(getNum('interest_rate_pct')) ?? 0.05,
         interest_distribution_rate_pct: pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
-        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45
+        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45,
+        loan_amount_sek: null // <-- nyckeln finns kvar, inget UI-fält
       };
 
-      setOut('Kör extraktion ...');
+      setOut('Kör extraktion ...'); err.style.display='none'; err.textContent='';
       const r=await fetch('process',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -600,6 +604,14 @@
       });
       const json = await r.json();
       LAST_RESP = json;
+
+      // Visa ev. felmeddelanden snyggt
+      const possibleErrors = json?.error || json?.errors || json?.analyses?.errors;
+      if(possibleErrors){
+        err.style.display='block';
+        err.textContent = typeof possibleErrors==='string' ? possibleErrors : JSON.stringify(possibleErrors,null,2);
+      }
+
       setOut(json);
       renderCards(json);
       btnExportJSON.disabled = false;
@@ -713,76 +725,4 @@
       rawText.textContent = "—";
       setUploadProgress(0); setExtractProgress(0);
       LAST_TEXT = ""; LAST_RESP = null; LAST_PAGES = 0;
-      kpiPrice.textContent="–"; kpiHa.textContent="–"; kpiVol.textContent="–"; kpiVha.textContent="–";
-      if(pdf) pdf.value = "";
-      btnExportJSON.disabled = true; btnExportCSV.disabled = true;
-      cards.innerHTML = "";
-      confWrap.innerHTML = "";
-      setStep(0);
-    }
-
-    // ---------- Presets (localStorage) ----------
-    const FIELDS = [
-      'price_per_m3sk','tax_rate_pct','skogskonto_share_pct',
-      'loan_share_pct','interest_rate_pct',
-      'interest_distribution_rate_pct','business_tax_effective_pct'
-    ];
-    function readAssumptions(){
-      const o={}; FIELDS.forEach(id=>o[id]=document.getElementById(id).value);
-      return o;
-    }
-    function writeAssumptions(o){
-      FIELDS.forEach(id=>{
-        if(o[id]!=null) document.getElementById(id).value = o[id];
-      });
-    }
-    function loadPresetList(){
-      const sel = document.getElementById('presetSelect');
-      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
-      sel.innerHTML='';
-      Object.keys(data).forEach(name=>{
-        const opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt);
-      });
-    }
-    btnSavePreset.addEventListener('click', ()=>{
-      const name = presetName.value.trim(); if(!name) return alert('Ange namn');
-      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
-      data[name]=readAssumptions();
-      localStorage.setItem('vedrik_presets', JSON.stringify(data));
-      loadPresetList();
-    });
-    btnLoadPreset.addEventListener('click', ()=>{
-      const name = presetSelect.value; if(!name) return;
-      const data = JSON.parse(localStorage.getItem('vedrik_presets')||'{}');
-      if(data[name]) writeAssumptions(data[name]);
-    });
-    document.addEventListener('DOMContentLoaded', loadPresetList);
-
-    // ---------- Bind ----------
-    btnUpload.addEventListener('click', onUpload);
-    btnProcess.addEventListener('click', onProcess);
-    btnExportJSON.addEventListener('click', onExportJSON);
-    btnExportCSV.addEventListener('click', onExportCSV);
-    btnClear.addEventListener('click', onClear);
-
-    // Logg UI
-    btnToggleLog.addEventListener('click', ()=>{
-      out.classList.toggle('collapsed');
-      btnToggleLog.textContent = out.classList.contains('collapsed') ? 'Visa mer' : 'Visa mindre';
-    });
-    btnCopyJSON.addEventListener('click', async ()=>{
-      try{
-        await navigator.clipboard.writeText(out.textContent);
-        btnCopyJSON.textContent = 'Kopierat!';
-        setTimeout(()=>btnCopyJSON.textContent='Kopiera JSON',1200);
-      }catch{}
-    });
-
-    // quick refs
-    const upPct = document.getElementById('upPct');
-    const exPct = document.getElementById('exPct');
-    const upBar = document.getElementById('upBar');
-    const exBar = document.getElementById('exBar');
-  </script>
-</body>
-</html>
+      kpiPrice.textContent="–"; kpiHa.textContent
