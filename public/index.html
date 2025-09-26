@@ -12,146 +12,73 @@
       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.worker.min.js";
   </script>
 
+  <!-- Chart.js för diagram -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
     :root{
-      --bg:#0b0f0c;
-      --panel:#0e140f;
-      --card:#111613e6;
-      --muted:#a7b0aa;
-      --text:#eef3ef;
-      --accent:#66d28c;
-      --accent-2:#51a8ff;
-      --accent-3:#f2b94c;
-      --border:#1d241f;
-      --shadow:0 12px 40px rgba(0,0,0,.35);
-      --radius:16px;
+      --bg:#0b0f0c; --panel:#0e140f; --card:#111613e6;
+      --muted:#a7b0aa; --text:#eef3ef;
+      --accent:#66d28c; --accent-2:#51a8ff; --border:#1d241f;
+      --shadow:0 12px 40px rgba(0,0,0,.35); --radius:16px;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{
-      margin:0;
-      font:16px/1.45 ui-sans-serif, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color:var(--text);
-      background:var(--bg);
-      -webkit-font-smoothing:antialiased;
-    }
+    body{margin:0;font:16px/1.45 ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
 
-    /* Hero */
-    .hero{
-      position:relative;
-      min-height:26vh;           /* mindre luft i överkant */
-      display:grid;
-      place-items:start start;   /* texten högre upp */
-      padding:16px 24px;         /* kompaktare padding */
-      background:#0b0f0c url("/forest.jpg") center/cover no-repeat;
-      isolation:isolate;
-    }
-    .hero::after{
-      content:""; position:absolute; inset:0;
-      background:linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.45) 60%, rgba(11,15,12,.9) 100%);
-      z-index:0;
-    }
-    .hero-inner{ position:relative; z-index:1; max-width:1200px; width:100%; margin:0 auto; }
-    .brand{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.3px; color:#eaf7ef; margin-bottom:4px; text-shadow:0 2px 14px rgba(0,0,0,.35); }
+    /* Hero (kompakt) */
+    .hero{position:relative;min-height:26vh;display:grid;place-items:start start;padding:16px 24px;background:#0b0f0c url("/forest.jpg") center/cover no-repeat;isolation:isolate}
+    .hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.08) 0%, rgba(0,0,0,.45) 60%, rgba(11,15,12,.9) 100%)}
+    .hero-inner{position:relative;z-index:1;max-width:1200px;width:100%;margin:0 auto}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:#eaf7ef;margin-bottom:4px;text-shadow:0 2px 14px rgba(0,0,0,.35)}
     .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(102,210,140,.18)}
-    h1{ margin:0 0 4px 0; font-size:clamp(26px,4vw,40px); line-height:1.1; text-shadow:0 2px 14px rgba(0,0,0,.35); }
-    .sub{ margin:0; color:#dfe7e1; opacity:.9 }
+    h1{margin:0 0 4px 0;font-size:clamp(26px,4vw,40px);line-height:1.1;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+    .sub{margin:0;color:#dfe7e1;opacity:.9}
 
-    /* Main layout */
-    .wrap{
-      max-width:1200px;
-      margin:-36px auto 72px;    /* drar upp innehållet lite */
-      padding:0 24px;
-      display:grid; grid-template-columns: 1.05fr 1.4fr; gap:18px;
-    }
-    @media (max-width:1020px){ .wrap{ grid-template-columns:1fr; } }
+    /* Layout */
+    .wrap{max-width:1200px;margin:-36px auto 72px;padding:0 24px;display:grid;grid-template-columns:1.05fr 1.4fr;gap:18px}
+    @media (max-width:1020px){ .wrap{ grid-template-columns:1fr } }
+    .panel{background:linear-gradient(180deg, rgba(17,22,19,.95), rgba(17,22,19,.85));border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);backdrop-filter: blur(8px);padding:16px}
+    @media (min-width:1020px){ aside.panel{position:sticky; top:16px; align-self:start; height:fit-content;} }
 
-    .panel{
-      background:linear-gradient(180deg, rgba(17,22,19,.95), rgba(17,22,19,.85));
-      border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);
-      backdrop-filter: blur(8px);
-      padding:16px;
-    }
-    @media (min-width:1020px){
-      aside.panel{ position:sticky; top:16px; align-self:start; height:fit-content; }
-    }
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);margin-bottom:12px}
+    .card .hd{padding:12px 16px 0;font-weight:700;color:#d9e3dc}
+    .card .bd{padding:12px 16px 16px}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+    .row>*{flex:1 1 220px}
 
-    /* Stepper */
-    .stepper{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px }
-    .step{
-      display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#0f140f;
-      color:#dfe7e1; font-weight:600; opacity:.85;
-    }
-    .step.active{ background:#152018; border-color:#2c3a33; opacity:1 }
-    .step.done{ background:#13261a; border-color:#2f5b40; }
-    .badge{ display:inline-grid; place-items:center; width:22px; height:22px; border-radius:999px; font-size:12px; background:#0f130f; border:1px solid #2b3530; }
-    .done .badge{ background:var(--accent); border-color:#44b86f; color:#071108; }
+    .input,.number,.file{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0f140f;color:var(--text);outline:none}
+    .checkbox{display:flex;align-items:center;gap:8px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid #2a3330;background:#152018;color:#e9f6ee;cursor:pointer;font-weight:700;transition:.18s transform ease,.18s background ease,.18s border-color ease}
+    .btn:hover{transform:translateY(-1px);background:#17251b;border-color:#31413a}
+    .btn.primary{background:var(--accent);border-color:#44b86f;color:#09110c}
+    .btn.blue{background:var(--accent-2);border-color:#2b7dd8;color:#071018}
+    .btn.ghost{background:#0f130f}
 
-    /* Cards + common */
-    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); }
-    .card .hd{ padding:14px 16px 0; color:#d9e3dc; display:flex; align-items:center; justify-content:space-between; gap:8px;}
-    .card .bd{ padding:14px 16px 18px }
-    .muted{ color:var(--muted) }
-    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end }
-    .row > *{ flex:1 1 220px }
-
-    /* Inputs & buttons */
-    .input, .number, .file{
-      width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border);
-      background:#0f140f; color:#fff; outline:none;
-    }
-    .checkbox{ display:flex; align-items:center; gap:8px; }
-    .btn{
-      display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid #2a3330;
-      background:#152018; color:#e9f6ee; cursor:pointer; font-weight:700;
-      transition:.18s transform ease,.18s background ease,.18s border-color ease;
-    }
-    .btn:hover{ transform:translateY(-1px); background:#17251b; border-color:#31413a }
-    .btn.primary{ background:var(--accent); border-color:#44b86f; color:#09110c }
-    .btn.primary:hover{ background:#5dd78f }
-    .btn.ghost{ background:#0f130f }
-    .btn.blue{ background:var(--accent-2); border-color:#2b7dd8; color:#071018 }
-    .btn.blue:hover{ background:#59b0ff }
-
-    /* Progress bars */
     .bar{height:10px;background:#0f130f;border:1px solid var(--border);border-radius:999px;overflow:hidden}
     .bar>div{height:100%;width:0%}
     #upBar{background:linear-gradient(90deg,#52d18b,#7de0a8)}
     #exBar{background:linear-gradient(90deg,#6fa8ff,#91c2ff)}
 
-    /* Right column dashboard */
+    /* KPI */
     .kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     @media (max-width:1020px){ .kpi{grid-template-columns:repeat(2,minmax(0,1fr))} }
     .kpi .item{background:#0f140f;border:1px solid var(--border);border-radius:12px;padding:12px}
     .kpi .lbl{font-size:12px;color:var(--muted)}
     .kpi .val{font-weight:800;font-size:18px;margin-top:2px}
-    .kpi .val.good{ color:#66d28c; }
-    .kpi .val.warn{ color:#f2b94c; }
-    .kpi .val.bad{  color:#ff7a7a; }
-    .badge-small{
-      display:inline-block; font-size:11px; padding:2px 6px; border-radius:999px;
-      border:1px solid #284133; margin-left:6px; background:#13261a; color:#b8e5c9;
-    }
 
     .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
     .card2{border:1px solid var(--border);border-radius:12px;background:#0f140f;padding:12px}
-    .card2 h4{margin:0 0 6px; cursor:pointer; user-select:none; }
-    .card2 .content{ display:none; }
-    .card2.open .content{ display:block; }
+    .card2 h4{margin:0 0 6px}
     .kv{display:flex;justify-content:space-between;gap:8px}
 
-    /* Logg */
     pre{white-space:pre-wrap;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    #out{background:#0f130f;border:1px dashed #233027;color:#dfe7e1;border-radius:12px;padding:12px;min-height:120px;max-height:360px;overflow:auto;position:relative}
-    #out.collapsed{ max-height:180px; }
-    #out.collapsed::after{
-      content:""; position:absolute; left:0; right:0; bottom:0; height:56px;
-      background: linear-gradient(180deg, rgba(15,19,15,0), #0f130f 60%);
-    }
-    .errbox{margin-top:10px;border:1px solid #4a2a2a;background:#1a0f0f;border-radius:10px;padding:10px;color:#ffb3b3}
+    #out{background:#0f130f;border:1px dashed #233027;color:#dfe7e1;border-radius:12px;padding:12px;min-height:120px;max-height:280px;overflow:auto}
     details.block{margin-top:12px;border:1px solid #213026;border-radius:8px;background:#0f140f}
     details.block summary{cursor:pointer;padding:10px 12px;color:#9fb0a6;font-weight:600}
-    details.block pre{margin:0;padding:12px;border-top:1px solid #213026;color:#91a198}
+    details.block .inner{padding:12px;border-top:1px solid #213026}
+    canvas{max-width:100%;height:320px}
   </style>
 </head>
 <body>
@@ -165,20 +92,11 @@
     </div>
   </header>
 
-  <!-- MAIN -->
   <main class="wrap">
-
-    <!-- LEFT: Wizard -->
+    <!-- Vänster: Wizard -->
     <aside class="panel">
-      <div class="stepper">
-        <div id="s1" class="step active"><span class="badge">1</span> Ladda upp</div>
-        <div id="s2" class="step"><span class="badge">2</span> Antaganden</div>
-        <div id="s3" class="step"><span class="badge">3</span> Resultat</div>
-      </div>
-
-      <!-- Step 1 -->
-      <section class="card" id="step1">
-        <div class="hd"><h3>1) Ladda upp & extrahera</h3></div>
+      <section class="card">
+        <div class="hd">1) Ladda upp & extrahera</div>
         <div class="bd">
           <div class="row">
             <input id="pdf" class="file" type="file" accept="application/pdf" />
@@ -202,7 +120,6 @@
             <label class="checkbox"><input type="checkbox" id="cbSummary" checked style="accent-color:#66d28c">Prioritera “Sammanställning över fastigheten”</label>
             <label class="checkbox"><input type="checkbox" id="cbEarlyPages" checked style="accent-color:#66d28c">Inkludera s.1–3</label>
           </div>
-
           <div class="row" style="margin-top:8px">
             <div>
               <div class="muted" style="margin-bottom:6px">Min tecken per sida</div>
@@ -221,51 +138,30 @@
         </div>
       </section>
 
-      <!-- Step 2 -->
-      <section class="card" id="step2" style="margin-top:12px">
-        <div class="hd"><h3>2) Antaganden & val av analyser</h3></div>
+      <section class="card">
+        <div class="hd">2) Antaganden & val av analyser</div>
         <div class="bd">
           <div class="row">
-            <div>
-              <div class="muted" style="margin-bottom:6px">Analyser</div>
-              <label class="checkbox"><input type="checkbox" class="an" value="summary_pack" checked>Sammanfattning</label>
-              <label class="checkbox"><input type="checkbox" class="an" value="key_metrics" checked>Nyckeltal</label>
-              <label class="checkbox"><input type="checkbox" class="an" value="initial_harvest_taxed" checked>Initial avverkning (skatt)</label>
-              <label class="checkbox"><input type="checkbox" class="an" value="loan_sustainability" checked>Lån & skogskonto</label>
-              <label class="checkbox"><input type="checkbox" class="an" value="interest_distribution" checked>Räntefördelning</label>
-              <label class="checkbox"><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked>Kassaflöde & DSCR (lean)</label>
-            </div>
+            <label>Pris (SEK/m³sk)<input type="number" id="price_per_m3sk" class="number" step="1" value="350"></label>
+            <label>Skattesats %<input type="number" id="tax_rate_pct" class="number" step="0.1" value="30"></label>
+            <label>Skogskontoandel %<input type="number" id="skogskonto_share_pct" class="number" step="1" value="60"></label>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label>Låneandel %<input type="number" id="loan_share_pct" class="number" step="1" value="100"></label>
+            <label>Ränta %<input type="number" id="interest_rate_pct" class="number" step="0.01" value="5"></label>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <label>Räntefördelningsränta %<input type="number" id="interest_distribution_rate_pct" class="number" step="0.01" value="8.62"></label>
+            <label>Eff. näringsskatt %<input type="number" id="business_tax_effective_pct" class="number" step="0.1" value="45"></label>
+          </div>
 
-            <div>
-              <div class="muted" style="margin-bottom:6px">Antaganden</div>
-              <div class="row">
-                <label>Pris (SEK/m³sk)
-                  <input type="number" id="price_per_m3sk" class="number" step="1" value="350">
-                </label>
-                <label>Skattesats %
-                  <input type="number" id="tax_rate_pct" class="number" step="0.1" value="30">
-                </label>
-                <label>Skogskontoandel %
-                  <input type="number" id="skogskonto_share_pct" class="number" step="1" value="60">
-                </label>
-              </div>
-              <div class="row" style="margin-top:6px">
-                <label>Låneandel %
-                  <input type="number" id="loan_share_pct" class="number" step="1" value="100">
-                </label>
-                <label>Ränta %
-                  <input type="number" id="interest_rate_pct" class="number" step="0.01" value="5">
-                </label>
-              </div>
-              <div class="row" style="margin-top:6px">
-                <label>Räntefördelningsränta %
-                  <input type="number" id="interest_distribution_rate_pct" class="number" step="0.01" value="8.62">
-                </label>
-                <label>Eff. näringsskatt %
-                  <input type="number" id="business_tax_effective_pct" class="number" step="0.1" value="45">
-                </label>
-              </div>
-            </div>
+          <div style="margin-top:12px">
+            <label class="checkbox"><input type="checkbox" class="an" value="summary_pack" checked> Sammanfattning</label><br>
+            <label class="checkbox"><input type="checkbox" class="an" value="key_metrics" checked> Nyckeltal</label><br>
+            <label class="checkbox"><input type="checkbox" class="an" value="initial_harvest_taxed" checked> Initial avverkning (skatt)</label><br>
+            <label class="checkbox"><input type="checkbox" class="an" value="loan_sustainability" checked> Lån & skogskonto</label><br>
+            <label class="checkbox"><input type="checkbox" class="an" value="interest_distribution" checked> Räntefördelning</label><br>
+            <label class="checkbox"><input type="checkbox" class="an" value="forward_cashflow_and_debt" checked> Kassaflöde & DSCR (lean)</label>
           </div>
 
           <div class="row" style="margin-top:12px">
@@ -273,27 +169,16 @@
             <button id="btnExportJSON" class="btn ghost" disabled>Exportera JSON</button>
             <button id="btnExportCSV" class="btn ghost" disabled>Exportera CSV</button>
           </div>
-
-          <!-- Presets -->
-          <div class="row" style="margin-top:8px">
-            <input id="presetName" class="input" placeholder="Namn på preset (t.ex. Bas 2025-Q3)">
-            <button id="btnSavePreset" class="btn">Spara preset</button>
-            <select id="presetSelect" class="input"></select>
-            <button id="btnLoadPreset" class="btn ghost">Ladda preset</button>
-          </div>
         </div>
       </section>
     </aside>
 
-    <!-- RIGHT: Results & dashboard -->
+    <!-- Höger: Resultat -->
     <section class="panel">
       <section class="card">
-        <div class="hd">
-          <h3 style="margin:0">Snabböversikt</h3>
-          <div id="confWrap"></div>
-        </div>
+        <div class="hd"><h3 style="margin:0">Snabböversikt</h3></div>
         <div class="bd">
-          <div class="kpi" id="kpiBox">
+          <div class="kpi">
             <div class="item"><div class="lbl">Prisidé</div><div class="val" id="kpiPrice">–</div></div>
             <div class="item"><div class="lbl">Skogsmark (ha)</div><div class="val" id="kpiHa">–</div></div>
             <div class="item"><div class="lbl">Volym totalt (m³sk)</div><div class="val" id="kpiVol">–</div></div>
@@ -302,35 +187,56 @@
         </div>
       </section>
 
-      <section class="card" style="margin-top:12px">
+      <section class="card">
         <div class="hd"><h3 style="margin:0">Resultat & logg</h3></div>
         <div class="bd">
-          <div id="cards" class="grid-cards" style="margin-bottom:12px"></div>
-          <pre id="out" class="collapsed">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
-          <div id="err" class="errbox" style="display:none"></div>
-          <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px">
-            <button id="btnToggleLog" class="btn ghost">Visa mer</button>
-            <button id="btnCopyJSON" class="btn ghost">Kopiera JSON</button>
-          </div>
+          <!-- Diagram (visa/dölj) -->
+          <details class="block" id="chartsBlock" open>
+            <summary>Diagram – kassaflöde, DSCR & åldersträd</summary>
+            <div class="inner" id="chartsContainer">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+                <div class="card2" id="cfCard">
+                  <h4>Kassaflöde per år</h4>
+                  <canvas id="cfChart"></canvas>
+                </div>
+                <div class="card2" id="dscrCard">
+                  <h4>DSCR per år</h4>
+                  <canvas id="dscrChart"></canvas>
+                </div>
+                <div class="card2" id="ageCard" style="display:none">
+                  <h4>Åldersfördelning skog</h4>
+                  <canvas id="ageChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </details>
 
-          <details class="block" style="margin-top:14px">
+          <!-- Kort med tabeller -->
+          <div id="cards" class="grid-cards" style="margin-top:12px"></div>
+
+          <!-- Logg -->
+          <pre id="out" style="margin-top:12px">{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }</pre>
+          <details class="block" style="margin-top:12px">
             <summary>Extraherad text (nedtonad)</summary>
-            <pre id="rawText">—</pre>
+            <pre id="rawText" class="inner">—</pre>
           </details>
         </div>
       </section>
     </section>
-
   </main>
 
   <script>
-    // ---------- Hjälp ----------
-    const fmt  = new Intl.NumberFormat("sv-SE");
+    // ---------- Hjälpformat ----------
+    const fmt = new Intl.NumberFormat("sv-SE");
     const fmt2 = new Intl.NumberFormat("sv-SE",{maximumFractionDigits:2});
     const SEK = v => (v==null||!isFinite(v)) ? "–" : fmt.format(Math.round(v)) + " kr";
     const NUM = v => (v==null||!isFinite(v)) ? "–" : fmt2.format(v);
+
+    // ---------- Progress ----------
     function setUploadProgress(p){ upPct.textContent=Math.round(p)+'%'; upBar.style.width=p+'%' }
     function setExtractProgress(p){ exPct.textContent=Math.round(p)+'%'; exBar.style.width=p+'%' }
+
+    // ---------- PDF-sidor att läsa ----------
     function parsePageSpec(str){
       if(!str || !str.trim()) return [];
       const out=[]; for(const part of str.split(',')){
@@ -340,15 +246,6 @@
         } else { const n=parseInt(s,10); if(Number.isFinite(n)) out.push(n); }
       }
       return [...new Set(out)];
-    }
-
-    // KPI färg (enkla trösklar)
-    function setKpiClass(el, val, goodHigh=true, t1=1, t2=0.7){
-      el.classList.remove('good','warn','bad');
-      const n = Number(val);
-      if(!isFinite(n)) return;
-      const a = goodHigh ? n : -n;
-      el.classList.add(a>t1 ? 'good' : a>t2 ? 'warn' : 'bad');
     }
 
     // ---------- PDF.js extraktion ----------
@@ -395,6 +292,7 @@
       return { text: chunks.join("").trim(), pagesUsed: ordered, totalPages: N };
     }
 
+    // ---------- Upload till worker (R2) ----------
     function uploadToWorkerWithProgress(file){
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -412,23 +310,54 @@
       });
     }
 
-    // ---------- UI state ----------
+    // ---------- UI-state ----------
     let LAST_TEXT = "";
     let LAST_RESP = null;
-    let LAST_PAGES = 0;
 
     function setOut(o){
       out.textContent = typeof o==='string' ? o : JSON.stringify(o,null,2);
     }
-    function setStep(activeIdx){
-      const steps=[s1,s2,s3];
-      steps.forEach((el,i)=>{
-        el.classList.toggle('active', i===activeIdx);
-        el.classList.toggle('done', i<activeIdx);
-      });
+
+    // ---------- Upload-knapp ----------
+    async function onUpload(){
+      const f = pdf.files[0];
+      if(!f){ alert('Välj en PDF först'); return; }
+
+      setUploadProgress(0); setExtractProgress(0);
+      setOut('Laddar upp till R2 ...');
+      let up;
+      try{ up = await uploadToWorkerWithProgress(f); }
+      catch(e){ setOut({ok:false, steg:'upload', error:String(e)}); return; }
+      key.textContent = up.key || '(okänd nyckel)';
+
+      try{
+        setOut('Extraherar text lokalt (PDF.js) ...');
+        const opts = {
+          includeEarlyPages: cbEarlyPages.checked,
+          preferSummary: cbSummary.checked,
+          minChars: Number(minChars.value)||160,
+          pages: parsePageSpec(pages.value)
+        };
+        const ab = await f.arrayBuffer();
+        const { text, pagesUsed, totalPages } = await Promise.race([
+          extractTextWithPDFJS(ab, opts),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
+        ]);
+        LAST_TEXT = text||"";
+        rawText.textContent = LAST_TEXT || "(tom)";
+        setOut({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
+      }catch(e){
+        LAST_TEXT = "";
+        setExtractProgress(100);
+        setOut({ steg:"upload (ingen lokal text – försök igen)", error:String(e) });
+      }
     }
 
-    // ---------- Cards ----------
+    // ---------- Helpers för inputs ----------
+    function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
+    function pctToDec(p){ return (p==null) ? null : (p/100); }
+
+    // ---------- Render-kort ----------
     function kv(label, value){
       const wrap=document.createElement('div'); wrap.className='kv';
       const a=document.createElement('span'); a.textContent=label;
@@ -438,17 +367,16 @@
       if(ll.includes("sek") || ll.includes("pris")) b.textContent = SEK(value);
       wrap.appendChild(a); wrap.appendChild(b); return wrap;
     }
-    function collapsibleCard(title, rows, open=false){
-      const c=document.createElement('div'); c.className='card2' + (open?' open':'');
+    function card(title, rows){
+      const c=document.createElement('div'); c.className='card2';
       const h=document.createElement('h4'); h.textContent=title; c.appendChild(h);
-      const wrap=document.createElement('div'); wrap.className='content';
-      rows.forEach(r=>wrap.appendChild(r));
-      c.appendChild(wrap);
-      h.addEventListener('click', ()=> c.classList.toggle('open'));
+      const content=document.createElement('div'); rows.forEach(r=>content.appendChild(r));
+      c.appendChild(content);
       return c;
     }
+
     function renderCards(resp){
-      const root = document.getElementById('cards'); root.innerHTML="";
+      cards.innerHTML="";
       const data = resp?.data || {};
       const sp   = resp?.analyses?.summary_pack || {};
       const km   = resp?.analyses?.key_metrics?.nyckeltal || sp?.nyckeltal || {};
@@ -465,7 +393,7 @@
         bonitet: data.bonitet ?? null,
         byggnader: data.byggnader ?? null
       };
-      root.appendChild(collapsibleCard("Grunddata", [
+      cards.appendChild(card("Grunddata", [
         kv("Fastighetsbeteckning", gd.fastighetsbeteckning),
         kv("Kommun", gd.kommun),
         kv("Areal (ha)", gd.areal_total_ha),
@@ -474,10 +402,10 @@
         kv("Volym/ha (m³sk/ha)", gd.volym_per_ha_m3sk),
         kv("Bonitet (m³/ha/år)", gd.bonitet),
         kv("Byggnader", gd.byggnader?.finns===true ? (gd.byggnader?.typer?.join(", ") || "Ja") : (gd.byggnader?.finns===false ? "Nej" : "Okänt"))
-      ], true));
+      ]));
 
       // Nyckeltal
-      root.appendChild(collapsibleCard("Nyckeltal", [
+      cards.appendChild(card("Nyckeltal", [
         kv("Prisförväntan (SEK)", km.pris_forvantning_sek),
         kv("Taxeringsvärde (SEK)", km.taxeringsvarde_sek),
         kv("Pris/ha (SEK/ha)", km.pris_per_hektar),
@@ -490,7 +418,7 @@
 
       // Lönsamhet – Initial avverkning
       const init = ln.initial_avverkning || {};
-      root.appendChild(collapsibleCard("Lönsamhet – Initial avverkning (skatt)", [
+      cards.appendChild(card("Lönsamhet – Initial avverkning (skatt)", [
         kv("Volym S1+S2 (m³sk)", init.volym_avverkning_m3sk),
         kv("Bruttointäkt (SEK)", init.bruttointakt_sek),
         kv("Skogsavdrag använt (SEK)", init.skogsavdrag_anstalld_sek),
@@ -504,7 +432,7 @@
 
       // Lån & Skogskonto – bärighet
       const loan = ln.lan_och_skogskonto || {};
-      root.appendChild(collapsibleCard("Lån & Skogskonto – bärighet", [
+      cards.appendChild(card("Lån & Skogskonto – bärighet", [
         kv("Initialt lån (SEK)", loan.initial_lan_sek),
         kv("Amortering med netto (SEK)", loan.amortering_med_netto_sek),
         kv("Restskuld (SEK)", loan.restskuld_sek),
@@ -515,7 +443,7 @@
 
       // Räntefördelning
       const idist = ln.rantefordelning || {};
-      root.appendChild(collapsibleCard("Räntefördelning (positiv)", [
+      cards.appendChild(card("Räntefördelning (positiv)", [
         kv("Kapitalunderlag (SEK)", idist.kapitalunderlag_sek),
         kv("Räntefördelningsränta (%)", idist.rantefordelningsranta_pct),
         kv("Räntefördelningsbelopp (SEK)", idist.rantefordelningsbelopp_sek),
@@ -524,67 +452,121 @@
 
       // Kassaflöde & DSCR
       const fwd = ln.framot_kassaflode_och_skuldbarande || {};
-      root.appendChild(collapsibleCard("Kassaflöde & DSCR (lean)", [
+      cards.appendChild(card("Kassaflöde & DSCR (lean)", [
         kv("Årlig tillväxt (m³sk)", fwd.arlig_tillvaxt_m3sk),
         kv("Årlig intäkt (SEK)", fwd.arlig_intakt_sek),
         kv("Lånekapacitet (SEK)", fwd.lanekapacitet_sek),
         kv("DSCR vs. givet lån", fwd.dscr_vs_given_loan),
         kv("DSCR vs. prisförväntan", fwd.dscr_vs_ask_price)
       ]));
+
+      // Uppdatera KPI
+      try{
+        const km2 = resp?.analyses?.key_metrics?.nyckeltal || {};
+        kpiPrice.textContent = SEK(km2?.pris_forvantning_sek ?? resp?.data?.pris_forvantning_sek);
+        kpiHa.textContent    = NUM(resp?.data?.skogsmark_ha ?? km2?.skogsmark_ha);
+        kpiVol.textContent   = NUM(resp?.data?.volym_total_m3sk ?? km2?.volym_total_m3sk);
+        const vha = (resp?.data?.volym_per_ha_m3sk!=null)? resp.data.volym_per_ha_m3sk :
+                    ((resp?.data?.volym_total_m3sk && resp?.data?.skogsmark_ha)? resp.data.volym_total_m3sk/resp.data.skogsmark_ha : km2?.volym_per_ha_m3sk);
+        kpiVha.textContent   = NUM(vha);
+      }catch{}
     }
 
-    // ---------- Event handlers ----------
-    async function onUpload(){
-      const f = pdf.files[0];
-      if(!f){ alert('Välj en PDF först'); return; }
-      setStep(0);
-      setUploadProgress(0); setExtractProgress(0);
-      setOut('Laddar upp till R2 ...'); err.style.display='none'; err.textContent='';
-      let up;
-      try{ up = await uploadToWorkerWithProgress(f); }
-      catch(e){ setOut({ok:false, steg:'upload', error:String(e)}); return; }
-      key.textContent = up.key;
+    // ---------- Diagram ----------
+    let cfChart, dscrChart, ageChart;
 
-      try{
-        setOut('Extraherar text lokalt (PDF.js) ...');
-        const opts = {
-          includeEarlyPages: cbEarlyPages.checked,
-          preferSummary: cbSummary.checked,
-          minChars: Number(minChars.value)||160,
-          pages: parsePageSpec(pages.value)
-        };
-        const ab = await f.arrayBuffer();
-        const { text, pagesUsed, totalPages } = await Promise.race([
-          extractTextWithPDFJS(ab, opts),
-          new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
-        ]);
-        LAST_TEXT = text||"";
-        LAST_PAGES = (pagesUsed||[]).length;
-        rawText.textContent = LAST_TEXT || "(tom)";
-        setOut({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
+    function destroyCharts(){
+      [cfChart, dscrChart, ageChart].forEach(ch => { if(ch){ ch.destroy(); } });
+      cfChart = dscrChart = ageChart = null;
+    }
 
-        // Confidence badge
-        const chars = (LAST_TEXT||"").length;
-        const hasSummary = /sammanställning/i.test(LAST_TEXT);
-        const conf = Math.max(0, Math.min(1, (chars/Math.max(1,LAST_PAGES*1200)) * (hasSummary?1.2:1.0)));
-        const wrap = document.getElementById('confWrap');
-        wrap.innerHTML = `<span class="badge-small">Confidence: ${(conf*100|0)}%</span>`;
+    function firstArrayLike(...candidates){
+      for(const c of candidates){
+        if(Array.isArray(c) && c.length>0) return c;
+      }
+      return null;
+    }
 
-        setStep(1);
-      }catch(e){
-        LAST_TEXT = "";
-        setExtractProgress(100);
-        setOut({ steg:"upload (ingen lokal text – försök igen)", error:String(e) });
+    function tryBuildAgeSeries(resp){
+      // Försöker hitta ett objekt med åldersklasser -> procent/ha
+      const candidates = [
+        resp?.analyses?.summary_pack?.grunddata?.aldersfordelning_procent,
+        resp?.analyses?.key_metrics?.aldersfordelning_procent,
+        resp?.data?.aldersfordelning_procent
+      ];
+      for(const obj of candidates){
+        if(obj && typeof obj==='object'){
+          const labels = Object.keys(obj);
+          const vals = labels.map(k => Number(obj[k])).filter(v => isFinite(v));
+          if(labels.length && vals.length===labels.length) return {labels, vals};
+        }
+      }
+      return null;
+    }
+
+    function renderCharts(resp){
+      destroyCharts();
+
+      const sp   = resp?.analyses?.summary_pack || {};
+      const ln   = sp?.lonsamhet || {};
+      const fwd  = ln?.framot_kassaflode_och_skuldbarande || {};
+      const yearlyCF = firstArrayLike(fwd.cashflow_by_year_sek, fwd.kassaflode_per_ar_sek);
+      const yearlyDSCR = firstArrayLike(fwd.dscr_by_year, fwd.dscr_per_ar);
+      const years = firstArrayLike(fwd.years) ||
+                    (yearlyCF ? yearlyCF.map((_,i)=>"År "+(i+1)) :
+                     yearlyDSCR ? yearlyDSCR.map((_,i)=>"År "+(i+1)) : null);
+
+      // Fallbacks om arrayer saknas
+      const cfData = yearlyCF || (fwd.arlig_intakt_sek ? Array.from({length:5}, ()=> Number(fwd.arlig_intakt_sek)) : null);
+      const dscrData = yearlyDSCR || (fwd.dscr_vs_given_loan ? Array.from({length:5}, ()=> Number(fwd.dscr_vs_given_loan)) : null);
+      const labels = years || (cfData ? cfData.map((_,i)=>"År "+(i+1)) : (dscrData ? dscrData.map((_,i)=>"År "+(i+1)) : []));
+
+      // Kassaflöde
+      if(cfData && labels.length){
+        const ctx = document.getElementById('cfChart');
+        cfChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Kassaflöde (SEK)', data: cfData }] },
+          options: { responsive:true, scales:{ y:{ ticks:{ callback:v=>fmt.format(v)+' kr' } } } }
+        });
+        document.getElementById('cfCard').style.display='';
+      } else {
+        document.getElementById('cfCard').style.display='none';
+      }
+
+      // DSCR
+      if(dscrData && labels.length){
+        const ctx2 = document.getElementById('dscrChart');
+        dscrChart = new Chart(ctx2, {
+          type: 'line',
+          data: { labels, datasets: [{ label: 'DSCR', data: dscrData, tension:0.25 }] },
+          options: { responsive:true, scales:{ y:{ min:0, ticks:{ callback:v=>fmt2.format(v) } } } }
+        });
+        document.getElementById('dscrCard').style.display='';
+      } else {
+        document.getElementById('dscrCard').style.display='none';
+      }
+
+      // Åldersfördelning
+      const age = tryBuildAgeSeries(resp);
+      if(age){
+        const ctx3 = document.getElementById('ageChart');
+        ageChart = new Chart(ctx3, {
+          type: 'bar',
+          data: { labels: age.labels, datasets: [{ label: 'Andel (%)', data: age.vals }] },
+          options: { responsive:true, scales:{ y:{ min:0, max:100, ticks:{ callback:v=>v+'%' } } } }
+        });
+        document.getElementById('ageCard').style.display='';
+      } else {
+        document.getElementById('ageCard').style.display='none';
       }
     }
 
-    function pctToDec(p){ return (p==null) ? null : (p/100); }
-    function getNum(id){ const v = Number(document.getElementById(id).value); return Number.isFinite(v) ? v : null; }
-
+    // ---------- Kör analyser ----------
     async function onProcess(){
-      const k=key.textContent.trim(); if(!k){ alert('Ladda upp först'); return; }
+      const keyVal = key.textContent.trim();
+      if(!keyVal){ alert('Ladda upp först'); return; }
       const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
-      // Viktigt: skicka loan_amount_sek: null för backend-kompatibilitet
       const options = {
         price_per_m3sk: getNum('price_per_m3sk') ?? null,
         tax_rate_pct: pctToDec(getNum('tax_rate_pct')) ?? 0.30,
@@ -592,48 +574,26 @@
         loan_share_pct: pctToDec(getNum('loan_share_pct')) ?? 1.0,
         interest_rate_pct: pctToDec(getNum('interest_rate_pct')) ?? 0.05,
         interest_distribution_rate_pct: pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
-        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45,
-        loan_amount_sek: null // <-- nyckeln finns kvar, inget UI-fält
+        business_tax_effective_pct: pctToDec(getNum('business_tax_effective_pct')) ?? 0.45
       };
 
-      setOut('Kör extraktion ...'); err.style.display='none'; err.textContent='';
+      setOut('Kör extraktion ...');
       const r=await fetch('process',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ key:k, analyses, text: LAST_TEXT || null, options })
+        body: JSON.stringify({ key: keyVal, analyses, text: LAST_TEXT || null, options })
       });
       const json = await r.json();
       LAST_RESP = json;
-
-      // Visa ev. felmeddelanden snyggt
-      const possibleErrors = json?.error || json?.errors || json?.analyses?.errors;
-      if(possibleErrors){
-        err.style.display='block';
-        err.textContent = typeof possibleErrors==='string' ? possibleErrors : JSON.stringify(possibleErrors,null,2);
-      }
-
       setOut(json);
       renderCards(json);
+      renderCharts(json);
+
       btnExportJSON.disabled = false;
       btnExportCSV.disabled = false;
-
-      // KPI
-      try{
-        const data = json?.data||{};
-        const km = json?.analyses?.key_metrics?.nyckeltal || {};
-        kpiPrice.textContent = SEK(km?.pris_forvantning_sek ?? data?.pris_forvantning_sek);
-        kpiHa.textContent    = NUM(data?.skogsmark_ha ?? km?.skogsmark_ha);
-        kpiVol.textContent   = NUM(data?.volym_total_m3sk ?? km?.volym_total_m3sk);
-        const vha = (data?.volym_per_ha_m3sk!=null)? data.volym_per_ha_m3sk :
-                    ((data?.volym_total_m3sk && data?.skogsmark_ha)? data.volym_total_m3sk/data.skogsmark_ha : km?.volym_per_ha_m3sk);
-        kpiVha.textContent   = NUM(vha);
-
-        // enkel färg för volym/ha (exempeltrösklar)
-        setKpiClass(kpiVha, parseFloat(String(vha).replace(',','.')), true, 220, 180);
-      }catch{}
-      setStep(2);
     }
 
+    // ---------- Export ----------
     function onExportJSON(){
       if (!LAST_RESP) return;
       const blob = new Blob([JSON.stringify(LAST_RESP, null, 2)], {type:'application/json'});
@@ -708,6 +668,7 @@
       const body = rows.map(r => headers.map(h => esc(r[h])).join(",")).join("\n");
       return head + "\n" + body;
     }
+
     function onExportCSV(){
       if (!LAST_RESP) return;
       const rows = flattenForCSV(LAST_RESP);
@@ -724,5 +685,23 @@
       setOut('{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }');
       rawText.textContent = "—";
       setUploadProgress(0); setExtractProgress(0);
-      LAST_TEXT = ""; LAST_RESP = null; LAST_PAGES = 0;
-      kpiPrice.textContent="–"; kpiHa.textContent
+      LAST_TEXT = ""; LAST_RESP = null;
+      kpiPrice.textContent="–"; kpiHa.textContent="–"; kpiVol.textContent="–"; kpiVha.textContent="–";
+      if(pdf) pdf.value = "";
+      btnExportJSON.disabled = true; btnExportCSV.disabled = true;
+      cards.innerHTML = "";
+      destroyCharts();
+      document.getElementById('cfCard').style.display='';
+      document.getElementById('dscrCard').style.display='';
+      document.getElementById('ageCard').style.display='none';
+    }
+
+    // ---------- Bind ----------
+    btnUpload.addEventListener('click', onUpload);
+    btnProcess.addEventListener('click', onProcess);
+    btnExportJSON.addEventListener('click', onExportJSON);
+    btnExportCSV.addEventListener('click', onExportCSV);
+    btnClear.addEventListener('click', onClear);
+  </script>
+</body>
+</html>
