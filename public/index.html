@@ -270,8 +270,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ---------- App state ----------
   let LAST_TEXT=""; let LAST_RESP=null;
 
+  // ---------- Upload ----------
   async function onUpload(){
     const f=inpPdf.files?.[0];
     if(!f){ alert('Välj en PDF först'); return; }
@@ -309,13 +311,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const box=document.createElement('div'); rows.forEach(r=>box.appendChild(r)); c.appendChild(box);
     return c;
   }
-
   function renderCards(resp){
     cards.innerHTML="";
     const data=resp?.data||{}; const sp=resp?.analyses?.summary_pack||{};
     const km=resp?.analyses?.key_metrics?.nyckeltal||sp?.nyckeltal||{};
-    const ln=sp?.lonsamhet||{};
-
     const gd=sp?.grunddata ?? {
       fastighetsbeteckning: data.fastighetsbeteckning || data.fastighet || null,
       kommun: data.kommun ?? null,
@@ -334,7 +333,6 @@ document.addEventListener('DOMContentLoaded', () => {
       kv("Volym/ha (m³sk/ha)",gd.volym_per_ha_m3sk),
       kv("Bonitet (m³/ha/år)",gd.bonitet)
     ]));
-
     cards.appendChild(card("Nyckeltal",[
       kv("Prisförväntan (SEK)",km.pris_forvantning_sek),
       kv("Pris/ha (SEK/ha)",km.pris_per_hektar),
@@ -382,19 +380,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     for(let y=0;y<H;y++){
       const vol=Number(plan[y]||0);
-      const brutto=vol*pricePerM3;
-      const ranta=loan*interest;
+      const brutto=vol*pricePerM3;          // INTÄKT = avverkning
+      const ranta=loan*interest;             // KOSTNAD = ränta
 
       const skogsavdrag=Math.max(0,Math.min(brutto,skogsavdragRemaining));
       skogsavdragRemaining-=skogsavdrag;
 
       const narInkF=Math.max(0,brutto-skogsavdrag);
-      const insattning=narInkF*skShare;
+      const insattning=narInkF*skShare;      // cash out & sänker årets beskattning
       skogskontoSaldo+=insattning;
 
-      const skatteunderlag=Math.max(0,(brutto-skogsavdrag-insattning)-ranta);
+      const skatteunderlag=Math.max(0,(brutto-skogsavdrag-insattning)-ranta); // ränta avdragsgill
       const skatt_ar=skatteunderlag*tax;
 
+      // Valfritt: täck ränta med uttag (brutto) från skogskonto -> skatt på uttag
       let uttag_brutto=0, skatt_uttag=0, uttag_netto=0;
       if(allowWithdraw && ranta>0){
         uttag_brutto=Math.min(ranta,skogskontoSaldo);
@@ -422,18 +421,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------- Diagram ----------
   let cfChart, dscrChart, valueChart;
   function destroyCharts(){ [cfChart,dscrChart,valueChart].forEach(c=>{ if(c) c.destroy(); }); cfChart=dscrChart=valueChart=null; }
-
   function renderCharts(sim){
     destroyCharts();
     cfChart=new Chart($('cfChart'),{ type:'bar', data:{labels:sim.years,datasets:[{label:'Kassaflöde (SEK)',data:sim.cf}]},
       options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
-
     dscrChart=new Chart($('dscrChart'),{
       type:'line', data:{labels:sim.years,datasets:[{label:'DSCR',data:sim.dscr,tension:.25}]},
       options:{responsive:true,scales:{y:{min:0,ticks:{callback:v=>fmt2.format(v)}}},plugins:{tooltip:{callbacks:{label:ctx=>fmt2.format(ctx.parsed.y)}}}},
       plugins:[{id:'ref',afterDraw(chart){const y=chart.scales.y.getPixelForValue(1);const ctx=chart.ctx;ctx.save();ctx.strokeStyle='#ff7a7a';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(chart.scales.x.left,y);ctx.lineTo(chart.scales.x.right,y);ctx.stroke();ctx.restore();}}]
     });
-
     valueChart=new Chart($('valueChart'),{ type:'line', data:{labels:sim.years,datasets:[{label:'Fastighetsvärde (SEK)',data:sim.valueSeries,tension:.25}]},
       options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
   }
@@ -525,7 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
     LAST_TEXT=""; LAST_RESP=null;
     [kpiPrice,kpiHa,kpiVol,kpiVha].forEach(el=>el.textContent="–");
     inpPdf.value=""; btnExportJSON.disabled=true; btnExportCSV.disabled=true; cards.innerHTML=""; yearTableWrap.innerHTML="";
-    [$('cfChart'),$('dscrChart'),$('valueChart')].forEach(c=>{ const ctx=c.getContext('2d'); ctx.clearRect(0,0,c.width,c.height); });
     if(cfChart) cfChart.destroy(); if(dscrChart) dscrChart.destroy(); if(valueChart) valueChart.destroy();
   }
 
