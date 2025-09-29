@@ -7,10 +7,7 @@
 
   <!-- PDF.js -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.worker.min.js";
-  </script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.10.111/legacy/build/pdf.worker.min.js";</script>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -18,18 +15,20 @@
   <style>
     :root{ --bg:#0b0f0c; --panel:#0e140f; --card:#111613e6; --muted:#a7b0aa; --text:#eef3ef; --accent:#66d28c; --accent-2:#51a8ff; --border:#1d241f; --shadow:0 12px 40px rgba(0,0,0,.35); --radius:16px; }
     *{box-sizing:border-box}
-    body{margin:0;font:16px/1.45 ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+    body{margin:0;font:16px/1.45 ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg)}
     .hero{position:relative;min-height:26vh;display:grid;place-items:start start;padding:16px 24px;background:#0b0f0c url("/forest.jpg") center/cover no-repeat}
     .hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.08),rgba(11,15,12,.9))}
     .hero-inner{position:relative;z-index:1;max-width:1200px;width:100%;margin:0 auto}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:#eaf7ef;margin-bottom:4px;text-shadow:0 2px 14px rgba(0,0,0,.35)}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:#eaf7ef;margin-bottom:4px}
     .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(102,210,140,.18)}
     h1{margin:0 0 4px 0;font-size:clamp(26px,4vw,40px);line-height:1.1}
     .sub{margin:0;color:#dfe7e1;opacity:.9}
+
     .wrap{max-width:1200px;margin:-36px auto 72px;padding:0 24px;display:grid;grid-template-columns:1.05fr 1.4fr;gap:18px}
     @media (max-width:1020px){.wrap{grid-template-columns:1fr}}
     .panel{background:linear-gradient(180deg, rgba(17,22,19,.95), rgba(17,22,19,.85));border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);backdrop-filter: blur(8px);padding:16px}
     @media (min-width:1020px){aside.panel{position:sticky;top:16px;align-self:start;height:fit-content}}
+
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);margin-bottom:12px}
     .card .hd{padding:12px 16px 0;font-weight:700;color:#d9e3dc;display:flex;align-items:center;justify-content:space-between}
     .card .bd{padding:12px 16px 16px}
@@ -42,25 +41,30 @@
     .btn.primary{background:var(--accent);border-color:#44b86f;color:#09110c}
     .btn.blue{background:var(--accent-2);border-color:#2b7dd8;color:#071018}
     .btn.ghost{background:#0f130f}
+
     .bar{height:10px;background:#0f130f;border:1px solid var(--border);border-radius:999px;overflow:hidden}
     .bar>div{height:100%;width:0%}
     #upBar{background:linear-gradient(90deg,#52d18b,#7de0a8)}
     #exBar{background:linear-gradient(90deg,#6fa8ff,#91c2ff)}
+
     .kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     @media (max-width:1020px){.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
     .kpi .item{background:#0f140f;border:1px solid var(--border);border-radius:12px;padding:12px}
     .kpi .lbl{font-size:12px;color:var(--muted)}
     .kpi .val{font-weight:800;font-size:18px;margin-top:2px}
+
     .grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
     .card2{border:1px solid var(--border);border-radius:12px;background:#0f140f;padding:12px}
-    .card2 h4{margin:0 0 6px}
-    .kv{display:flex;justify-content:space-between;gap:8px}
+    .card2 h4{margin:0 0 6px}.kv{display:flex;justify-content:space-between;gap:8px}
+
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{border-bottom:1px solid #223028;padding:8px 6px;text-align:right}
     th:first-child,td:first-child{text-align:left}
     tbody tr:hover{background:#111812}
+
     pre{white-space:pre-wrap;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
     #out{background:#0f130f;border:1px dashed #233027;color:#dfe7e1;border-radius:12px;padding:12px;min-height:120px;max-height:280px;overflow:auto}
+
     details.block{margin-top:12px;border:1px solid #213026;border-radius:8px;background:#0f140f}
     details.block summary{cursor:pointer;padding:10px 12px;color:#9fb0a6;font-weight:600}
     details.block .inner{padding:12px;border-top:1px solid #213026}
@@ -203,39 +207,34 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // ----- Shorthands -----
-  const $ = (id) => document.getElementById(id);
+  // ---------- Utils ----------
+  const $ = id => document.getElementById(id);
   const fmt=new Intl.NumberFormat("sv-SE");
   const fmt2=new Intl.NumberFormat("sv-SE",{maximumFractionDigits:2});
   const SEK=v=>(v==null||!isFinite(v))?"–":fmt.format(Math.round(v))+" kr";
   const NUM=v=>(v==null||!isFinite(v))?"–":fmt2.format(v);
 
-  // ----- Elements -----
-  const inpPdf = $('inpPdf');
-  const btnUpload = $('btnUpload');
-  const btnProcess = $('btnProcess');
-  const btnExportJSON = $('btnExportJSON');
-  const btnExportCSV = $('btnExportCSV');
-  const btnClear = $('btnClear');
-
+  // ---------- Elements ----------
+  const inpPdf=$('inpPdf'), btnUpload=$('btnUpload'), btnProcess=$('btnProcess'),
+        btnExportJSON=$('btnExportJSON'), btnExportCSV=$('btnExportCSV'), btnClear=$('btnClear');
   const upPct=$('upPct'), upBar=$('upBar'), exPct=$('exPct'), exBar=$('exBar');
   const cbSummary=$('cbSummary'), cbEarlyPages=$('cbEarlyPages'), minChars=$('minChars'), pages=$('pages');
-  const txtKey=$('txtKey');
-  const rawText=$('rawText'); const out=$('out');
-
+  const txtKey=$('txtKey'), rawText=$('rawText'), out=$('out');
   const kpiPrice=$('kpiPrice'), kpiHa=$('kpiHa'), kpiVol=$('kpiVol'), kpiVha=$('kpiVha');
-  const cards=$('cards'), yearTableWrap=$('yearTableWrap');
-  const cbAllowWithdraw=$('cbAllowWithdraw');
+  const cards=$('cards'), yearTableWrap=$('yearTableWrap'), cbAllowWithdraw=$('cbAllowWithdraw');
 
-  // ----- Helpers -----
-  function setUploadProgress(p){ upPct.textContent=Math.round(p)+'%'; upBar.style.width=p+'%'; }
-  function setExtractProgress(p){ exPct.textContent=Math.round(p)+'%'; exBar.style.width=p+'%'; }
-  function setOut(o){ out.textContent = typeof o==='string'?o:JSON.stringify(o,null,2); }
+  // ---------- Progress ----------
+  const setUploadProgress=p=>{ upPct.textContent=Math.round(p)+'%'; upBar.style.width=p+'%'; };
+  const setExtractProgress=p=>{ exPct.textContent=Math.round(p)+'%'; exBar.style.width=p+'%'; };
+
+  // ---------- Helpers ----------
   function parsePageSpec(str){
     if(!str||!str.trim()) return [];
-    const out=[]; for(const part of str.split(',')){ const s=part.trim(); if(!s) continue;
-      if(s.includes('-')){ let [a,b]=s.split('-').map(x=>parseInt(x,10)); if(Number.isFinite(a)&&Number.isFinite(b)){ if(a>b)[a,b]=[b,a]; for(let i=a;i<=b;i++) out.push(i); } }
-      else { const n=parseInt(s,10); if(Number.isFinite(n)) out.push(n); }
+    const out=[]; for(const part of str.split(',')){
+      const s=part.trim(); if(!s) continue;
+      if(s.includes('-')){ let [a,b]=s.split('-').map(x=>parseInt(x,10));
+        if(Number.isFinite(a)&&Number.isFinite(b)){ if(a>b)[a,b]=[b,a]; for(let i=a;i<=b;i++) out.push(i); }
+      } else { const n=parseInt(s,10); if(Number.isFinite(n)) out.push(n); }
     }
     return [...new Set(out)];
   }
@@ -274,53 +273,268 @@ document.addEventListener('DOMContentLoaded', () => {
   let LAST_TEXT=""; let LAST_RESP=null;
 
   async function onUpload(){
-    const f = inpPdf.files?.[0];
+    const f=inpPdf.files?.[0];
     if(!f){ alert('Välj en PDF först'); return; }
-
-    setUploadProgress(0); setExtractProgress(0);
-    setOut('Laddar upp till R2 ...');
+    setUploadProgress(0); setExtractProgress(0); out.textContent='Laddar upp till R2 ...';
     let up;
-    try{ up = await uploadToWorkerWithProgress(f); }
-    catch(e){ setOut({ok:false, steg:'upload', error:String(e)}); return; }
-    txtKey.textContent = up.key || '(okänd nyckel)';
+    try{ up=await uploadToWorkerWithProgress(f); }catch(e){ out.textContent=JSON.stringify({ok:false,steg:'upload',error:String(e)},null,2); return; }
+    txtKey.textContent=up.key||'(okänd nyckel)';
 
     try{
-      setOut('Extraherar text lokalt (PDF.js) ...');
-      const opts = {
-        includeEarlyPages: cbEarlyPages.checked,
-        preferSummary: cbSummary.checked,
-        minChars: Number(minChars.value)||160,
-        pages: parsePageSpec(pages.value)
-      };
-      const ab = await f.arrayBuffer();
+      out.textContent='Extraherar text lokalt (PDF.js) ...';
+      const opts={ includeEarlyPages:cbEarlyPages.checked, preferSummary:cbSummary.checked, minChars:Number(minChars.value)||160, pages:parsePageSpec(pages.value) };
+      const ab=await f.arrayBuffer();
       const { text, pagesUsed, totalPages } = await Promise.race([
         extractTextWithPDFJS(ab, opts),
         new Promise((_,rej)=>setTimeout(()=>rej(new Error('PDF.js timeout')),20000))
       ]);
-      LAST_TEXT = text||"";
-      rawText.textContent = LAST_TEXT || "(tom)";
-      setOut({ steg:"upload+extract", key: up.key, extracted_chars:(text||"").length, pages_used: pagesUsed, total_pages: totalPages });
-    }catch(e){
-      LAST_TEXT = "";
-      setExtractProgress(100);
-      setOut({ steg:"upload (ingen lokal text – försök igen)", error:String(e) });
-    }
+      LAST_TEXT=text||""; rawText.textContent=LAST_TEXT||"(tom)";
+      out.textContent=JSON.stringify({steg:"upload+extract", key:up.key, extracted_chars:(text||"").length, pages_used:pagesUsed, total_pages:totalPages},null,2);
+    }catch(e){ LAST_TEXT=""; setExtractProgress(100); out.textContent=JSON.stringify({steg:"upload (ingen lokal text – försök igen)", error:String(e)},null,2); }
   }
 
-  // ----- Resterande app (oförändrat i sak) -----
-  function getNum(id){ const v = Number($(id).value); return Number.isFinite(v) ? v : null; }
-  function pctToDec(p){ return (p==null) ? null : (p/100); }
+  // ---------- Cards ----------
+  function kv(label, value){
+    const el=document.createElement('div'); el.className='kv';
+    const a=document.createElement('span'); a.textContent=label;
+    const b=document.createElement('span');
+    const ll=label.toLowerCase();
+    b.textContent=(typeof value==='number')?(Number.isInteger(value)?fmt.format(value):fmt2.format(value)):(value??"–");
+    if(ll.includes("sek")||ll.includes("pris")) b.textContent=SEK(value);
+    el.append(a,b); return el;
+  }
+  function card(title, rows){
+    const c=document.createElement('div'); c.className='card2';
+    const h=document.createElement('h4'); h.textContent=title; c.appendChild(h);
+    const box=document.createElement('div'); rows.forEach(r=>box.appendChild(r)); c.appendChild(box);
+    return c;
+  }
 
-  // (… resten av din logik för analyser, simulering, diagram, tabell — behåll den du kör nu …)
-  // Nedan binder vi bara knapparna säkert:
+  function renderCards(resp){
+    cards.innerHTML="";
+    const data=resp?.data||{}; const sp=resp?.analyses?.summary_pack||{};
+    const km=resp?.analyses?.key_metrics?.nyckeltal||sp?.nyckeltal||{};
+    const ln=sp?.lonsamhet||{};
 
+    const gd=sp?.grunddata ?? {
+      fastighetsbeteckning: data.fastighetsbeteckning || data.fastighet || null,
+      kommun: data.kommun ?? null,
+      areal_total_ha: data.areal_total_ha ?? null,
+      skogsmark_ha: data.skogsmark_ha ?? null,
+      volym_total_m3sk: data.volym_total_m3sk ?? null,
+      volym_per_ha_m3sk: data.volym_per_ha_m3sk ?? ((data.volym_total_m3sk&&data.skogsmark_ha)?(data.volym_total_m3sk/data.skogsmark_ha):null),
+      bonitet: data.bonitet ?? null
+    };
+    cards.appendChild(card("Grunddata",[
+      kv("Fastighetsbeteckning",gd.fastighetsbeteckning),
+      kv("Kommun",gd.kommun),
+      kv("Areal (ha)",gd.areal_total_ha),
+      kv("Skogsmark (ha)",gd.skogsmark_ha),
+      kv("Volym totalt (m³sk)",gd.volym_total_m3sk),
+      kv("Volym/ha (m³sk/ha)",gd.volym_per_ha_m3sk),
+      kv("Bonitet (m³/ha/år)",gd.bonitet)
+    ]));
+
+    cards.appendChild(card("Nyckeltal",[
+      kv("Prisförväntan (SEK)",km.pris_forvantning_sek),
+      kv("Pris/ha (SEK/ha)",km.pris_per_hektar),
+      kv("Pris/m³sk (SEK/m³sk)",km.pris_per_m3sk),
+      kv("Tillväxt (m³sk/år)",km.tillvaxt_m3sk_per_ar)
+    ]));
+
+    try{
+      kpiPrice.textContent=SEK(km?.pris_forvantning_sek ?? data?.pris_forvantning_sek);
+      kpiHa.textContent   =NUM(data?.skogsmark_ha ?? km?.skogsmark_ha);
+      kpiVol.textContent  =NUM(data?.volym_total_m3sk ?? km?.volym_total_m3sk);
+      const vha=(data?.volym_per_ha_m3sk!=null)?data.volym_per_ha_m3sk:((data?.volym_total_m3sk&&data?.skogsmark_ha)?data.volym_total_m3sk/data.skogsmark_ha:km?.volym_per_ha_m3sk);
+      kpiVha.textContent  =NUM(vha);
+    }catch{}
+  }
+
+  // ---------- Simulering CF/DSCR/Värde ----------
+  function simulate(resp, ui){
+    const H=10;
+    const km=resp?.analyses?.key_metrics?.nyckeltal||{};
+    const sp=resp?.analyses?.summary_pack||{}; const ln=sp?.lonsamhet||{};
+    const init=ln?.initial_avverkning||{}; const fwd=ln?.framot_kassaflode_och_skuldbarande||{};
+
+    const pricePerM3=Number(ui.price_per_m3sk ?? 350);
+    const tax=Number(ui.tax_rate_pct ?? 0.30);
+    const skShare=Number(ui.skogskonto_share_pct ?? 0.60);
+    const interest=Number(ui.interest_rate_pct ?? 0.05);
+    const loanShare=Number(ui.loan_share_pct ?? 1.0);
+    const allowWithdraw=!!ui.allow_withdraw;
+
+    const askPrice=Number(km.pris_forvantning_sek ?? resp?.data?.pris_forvantning_sek ?? 0);
+    const loan=askPrice*loanShare;
+    const growth_m3=Number(km.tillvaxt_m3sk_per_ar ?? fwd.arlig_tillvaxt_m3sk ?? 0);
+
+    const plan=new Array(H).fill(0);
+    if(init?.volym_avverkning_m3sk) plan[0]=Number(init.volym_avverkning_m3sk);
+
+    let skogsavdragRemaining=Number(init?.skogsavdrag_potential_sek ?? (0.6*(askPrice||0)));
+    let skogskontoSaldo=0;
+    let forestValue=askPrice||0;
+
+    const years=Array.from({length:H},(_,i)=>"År "+(i+1));
+    const cf=new Array(H).fill(0), dscr=new Array(H).fill(null), valueSeries=new Array(H).fill(0);
+    const table=[];
+
+    for(let y=0;y<H;y++){
+      const vol=Number(plan[y]||0);
+      const brutto=vol*pricePerM3;
+      const ranta=loan*interest;
+
+      const skogsavdrag=Math.max(0,Math.min(brutto,skogsavdragRemaining));
+      skogsavdragRemaining-=skogsavdrag;
+
+      const narInkF=Math.max(0,brutto-skogsavdrag);
+      const insattning=narInkF*skShare;
+      skogskontoSaldo+=insattning;
+
+      const skatteunderlag=Math.max(0,(brutto-skogsavdrag-insattning)-ranta);
+      const skatt_ar=skatteunderlag*tax;
+
+      let uttag_brutto=0, skatt_uttag=0, uttag_netto=0;
+      if(allowWithdraw && ranta>0){
+        uttag_brutto=Math.min(ranta,skogskontoSaldo);
+        skatt_uttag=uttag_brutto*tax;
+        uttag_netto=uttag_brutto - skatt_uttag;
+        skogskontoSaldo-=uttag_brutto;
+      }
+
+      const kassaflode=brutto - insattning - skatt_ar - ranta + uttag_netto;
+      cf[y]=kassaflode;
+
+      const inflowForDebt=Math.max(0,(brutto - insattning - skatt_ar) + uttag_netto);
+      dscr[y]= ranta>0 ? (inflowForDebt / ranta) : null;
+
+      const growthValue=(growth_m3||0)*pricePerM3;
+      const harvestValue=vol*pricePerM3;
+      forestValue=forestValue + growthValue - harvestValue;
+      valueSeries[y]=forestValue;
+
+      table.push({ar:years[y],brutto_avverk:brutto,skogsavdrag,insattning,uttag_brutto,skatt_uttag,uttag_netto,ranta,skatt_ar,kassaflode,dscr:dscr[y],fastighetsvarde:forestValue});
+    }
+    return {years,cf,dscr,valueSeries,table};
+  }
+
+  // ---------- Diagram ----------
+  let cfChart, dscrChart, valueChart;
+  function destroyCharts(){ [cfChart,dscrChart,valueChart].forEach(c=>{ if(c) c.destroy(); }); cfChart=dscrChart=valueChart=null; }
+
+  function renderCharts(sim){
+    destroyCharts();
+    cfChart=new Chart($('cfChart'),{ type:'bar', data:{labels:sim.years,datasets:[{label:'Kassaflöde (SEK)',data:sim.cf}]},
+      options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
+
+    dscrChart=new Chart($('dscrChart'),{
+      type:'line', data:{labels:sim.years,datasets:[{label:'DSCR',data:sim.dscr,tension:.25}]},
+      options:{responsive:true,scales:{y:{min:0,ticks:{callback:v=>fmt2.format(v)}}},plugins:{tooltip:{callbacks:{label:ctx=>fmt2.format(ctx.parsed.y)}}}},
+      plugins:[{id:'ref',afterDraw(chart){const y=chart.scales.y.getPixelForValue(1);const ctx=chart.ctx;ctx.save();ctx.strokeStyle='#ff7a7a';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(chart.scales.x.left,y);ctx.lineTo(chart.scales.x.right,y);ctx.stroke();ctx.restore();}}]
+    });
+
+    valueChart=new Chart($('valueChart'),{ type:'line', data:{labels:sim.years,datasets:[{label:'Fastighetsvärde (SEK)',data:sim.valueSeries,tension:.25}]},
+      options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
+  }
+
+  function renderTable(sim){
+    const rows=sim.table.map(r=>`
+      <tr>
+        <td>${r.ar}</td>
+        <td>${SEK(r.brutto_avverk)}</td>
+        <td>${SEK(r.skogsavdrag)}</td>
+        <td>${SEK(r.insattning)}</td>
+        <td>${SEK(r.uttag_brutto)}</td>
+        <td>${SEK(r.skatt_uttag)}</td>
+        <td>${SEK(r.uttag_netto)}</td>
+        <td>${SEK(r.ranta)}</td>
+        <td>${SEK(r.skatt_ar)}</td>
+        <td>${SEK(r.kassaflode)}</td>
+        <td>${r.dscr==null?'–':fmt2.format(r.dscr)}</td>
+        <td>${SEK(r.fastighetsvarde)}</td>
+      </tr>`).join("");
+    yearTableWrap.innerHTML=`<table>
+      <thead><tr>
+        <th>År</th><th>Brutto avverkning</th><th>Skogsavdrag</th><th>Insättning skogskonto</th>
+        <th>Uttag skogskonto (brutto)</th><th>Skatt på uttag</th><th>Uttag skogskonto (netto)</th>
+        <th>Ränta</th><th>Skatt i år</th><th>Kassaflöde</th><th>DSCR</th><th>Fastighetsvärde</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // ---------- Process ----------
+  function getNum(id){ const v=Number($(id).value); return Number.isFinite(v)?v:null; }
+  const pctToDec=p=>p==null?null:(p/100);
+
+  async function onProcess(){
+    const key=txtKey.textContent.trim();
+    if(!key){ alert('Ladda upp först'); return; }
+    const analyses=[...document.querySelectorAll('.an:checked')].map(x=>x.value);
+    const options={
+      price_per_m3sk:getNum('price_per_m3sk') ?? null,
+      tax_rate_pct:pctToDec(getNum('tax_rate_pct')) ?? 0.30,
+      skogskonto_share_pct:pctToDec(getNum('skogskonto_share_pct')) ?? 0.60,
+      loan_share_pct:pctToDec(getNum('loan_share_pct')) ?? 1.0,
+      interest_rate_pct:pctToDec(getNum('interest_rate_pct')) ?? 0.05,
+      interest_distribution_rate_pct:pctToDec(getNum('interest_distribution_rate_pct')) ?? 0.0862,
+      business_tax_effective_pct:pctToDec(getNum('business_tax_effective_pct')) ?? 0.45
+    };
+
+    out.textContent='Kör process...';
+    const r=await fetch('process',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ key, analyses, text: LAST_TEXT || null, options }) });
+    const json=await r.json(); LAST_RESP=json;
+    out.textContent=JSON.stringify(json,null,2);
+    renderCards(json);
+
+    const sim=simulate(json,{
+      price_per_m3sk: options.price_per_m3sk,
+      tax_rate_pct: options.tax_rate_pct,
+      skogskonto_share_pct: options.skogskonto_share_pct,
+      loan_share_pct: options.loan_share_pct,
+      interest_rate_pct: options.interest_rate_pct,
+      allow_withdraw: cbAllowWithdraw.checked
+    });
+    renderCharts(sim); renderTable(sim);
+
+    btnExportJSON.disabled=false; btnExportCSV.disabled=false;
+  }
+
+  // ---------- Export ----------
+  function onExportJSON(){
+    if(!LAST_RESP) return;
+    const blob=new Blob([JSON.stringify(LAST_RESP,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download='vedrik-skog-resultat.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+  function onExportCSV(){
+    if(!LAST_RESP) return;
+    const sp=LAST_RESP?.analyses?.summary_pack;
+    const gd=sp?.grunddata ?? LAST_RESP?.data ?? {};
+    const nk=sp?.nyckeltal ?? LAST_RESP?.analyses?.key_metrics?.nyckeltal ?? {};
+    const row={ fastighetsbeteckning:gd.fastighetsbeteckning ?? gd.fastighet ?? "", kommun:gd.kommun ?? "", skogsmark_ha:gd.skogsmark_ha ?? "", volym_total_m3sk:gd.volym_total_m3sk ?? "", pris_forvantning_sek:nk.pris_forvantning_sek ?? "" };
+    const headers=Object.keys(row); const esc=v=>{ if(v==null) return ""; const s=String(v).replace(/"/g,'""'); return /[",\n]/.test(s)?`"${s}"`:s; };
+    const csv=headers.join(",")+"\n"+headers.map(h=>esc(row[h])).join(",");
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='vedrik-skog-resultat.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // ---------- Clear ----------
+  function onClear(){
+    txtKey.textContent=""; out.textContent='{ "tips": "1) Ladda upp PDF, 2) Kör extraktion." }';
+    rawText.textContent="—"; setUploadProgress(0); setExtractProgress(0);
+    LAST_TEXT=""; LAST_RESP=null;
+    [kpiPrice,kpiHa,kpiVol,kpiVha].forEach(el=>el.textContent="–");
+    inpPdf.value=""; btnExportJSON.disabled=true; btnExportCSV.disabled=true; cards.innerHTML=""; yearTableWrap.innerHTML="";
+    [$('cfChart'),$('dscrChart'),$('valueChart')].forEach(c=>{ const ctx=c.getContext('2d'); ctx.clearRect(0,0,c.width,c.height); });
+    if(cfChart) cfChart.destroy(); if(dscrChart) dscrChart.destroy(); if(valueChart) valueChart.destroy();
+  }
+
+  // ---------- Bind ----------
   btnUpload.addEventListener('click', onUpload);
-  btnClear.addEventListener('click', () => location.reload());
-
-  // Placeholders så knapparna inte kraschar om du inte hunnit hooka upp dem ännu:
-  btnProcess.addEventListener('click', () => alert("Kör extraktion + analyser: implementerad i din nuvarande onProcess()."));
-  btnExportJSON.addEventListener('click', () => alert("Export JSON – koppla till din onExportJSON()."));
-  btnExportCSV.addEventListener('click', () => alert("Export CSV – koppla till din onExportCSV()."));
+  btnProcess.addEventListener('click', onProcess);
+  btnExportJSON.addEventListener('click', onExportJSON);
+  btnExportCSV.addEventListener('click', onExportCSV);
+  btnClear.addEventListener('click', onClear);
 });
 </script>
 </body>
