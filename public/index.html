@@ -176,7 +176,7 @@
       <div class="hd"><h3 style="margin:0">Resultat & logg</h3></div>
       <div class="bd">
         <details class="block" open>
-          <summary>Kassaflöde per år</summary>
+          <summary>Kassaflöde per år (staplad)</summary>
           <div class="inner"><canvas id="cfChart"></canvas></div>
         </details>
         <details class="block" open>
@@ -186,6 +186,23 @@
         <details class="block" open>
           <summary>Värdeutveckling (fastighet)</summary>
           <div class="inner"><canvas id="valueChart"></canvas></div>
+        </details>
+
+        <details class="block" open>
+          <summary>Aggregerat kassaflöde (kumulativt)</summary>
+          <div class="inner"><canvas id="cumCfChart"></canvas></div>
+        </details>
+
+        <details class="block" open>
+          <summary>Skatteeffekter</summary>
+          <div class="inner">
+            <canvas id="taxChart" style="margin-bottom:12px"></canvas>
+            <div id="taxPills" class="kpi" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+              <div class="item"><div class="lbl">Summa skatt (verksamhet)</div><div class="val" id="pillSkattAr">–</div></div>
+              <div class="item"><div class="lbl">Summa skatt (uttag skogskonto)</div><div class="val" id="pillSkattUttag">–</div></div>
+              <div class="item"><div class="lbl">Skogsavdrag – utnyttjat</div><div class="val" id="pillSkogsavdragUsed">–</div></div>
+            </div>
+          </div>
         </details>
 
         <div id="cards" class="grid-cards" style="margin-top:12px"></div>
@@ -349,12 +366,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }catch{}
   }
 
-  // ---------- Simulering CF/DSCR/Värde ----------
+  // ---------- Simulering CF/DSCR/Värde + Skatt ----------
   function simulate(resp, ui){
     const H=10;
     const km=resp?.analyses?.key_metrics?.nyckeltal||{};
-    const sp=resp?.analyses?.summary_pack||{}; const ln=sp?.lonsamhet||{};
-    const init=ln?.initial_avverkning||{}; const fwd=ln?.framot_kassaflode_och_skuldbarande||{};
+    const sp=resp?.analyses?.summary_pack||{}; 
+    const ln=sp?.lonsamhet||{};
+    const init=ln?.initial_avverkning||{}; 
+    const fwd=ln?.framot_kassaflode_och_skuldbarande||{};
 
     const pricePerM3=Number(ui.price_per_m3sk ?? 350);
     const tax=Number(ui.tax_rate_pct ?? 0.30);
@@ -364,36 +383,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const allowWithdraw=!!ui.allow_withdraw;
 
     const askPrice=Number(km.pris_forvantning_sek ?? resp?.data?.pris_forvantning_sek ?? 0);
-    const loan=askPrice*loanShare;
+    const fallbackValue = Number(resp?.analyses?.key_metrics?.nyckeltal?.taxeringsvarde_sek ?? 0) * 1.2;
+    const baseValue = askPrice || fallbackValue;
+
+    const loan=baseValue*loanShare;
     const growth_m3=Number(km.tillvaxt_m3sk_per_ar ?? fwd.arlig_tillvaxt_m3sk ?? 0);
 
     const plan=new Array(H).fill(0);
     if(init?.volym_avverkning_m3sk) plan[0]=Number(init.volym_avverkning_m3sk);
 
-    let skogsavdragRemaining=Number(init?.skogsavdrag_potential_sek ?? (0.6*(askPrice||0)));
+    let skogsavdragRemaining=Number(init?.skogsavdrag_potential_sek ?? (0.6*(baseValue||0)));
     let skogskontoSaldo=0;
-    let forestValue=askPrice||0;
+    let forestValue=baseValue;
 
     const years=Array.from({length:H},(_,i)=>"År "+(i+1));
-    const cf=new Array(H).fill(0), dscr=new Array(H).fill(null), valueSeries=new Array(H).fill(0);
+    const cf=new Array(H).fill(0);
+    const dscr=new Array(H).fill(null);
+    const cumCF=new Array(H).fill(0);
+
+    const skattArArr=[], skattUttagArr=[], skogsavdragArr=[], insattningArr=[], saldoArr=[];
+    const valueSeries=new Array(H).fill(0);
     const table=[];
+
+    let cumul=0, firstDeficitIndex=null;
 
     for(let y=0;y<H;y++){
       const vol=Number(plan[y]||0);
-      const brutto=vol*pricePerM3;          // INTÄKT = avverkning
-      const ranta=loan*interest;             // KOSTNAD = ränta
+      const brutto=vol*pricePerM3;
+      const ranta=loan*interest;
 
       const skogsavdrag=Math.max(0,Math.min(brutto,skogsavdragRemaining));
       skogsavdragRemaining-=skogsavdrag;
 
       const narInkF=Math.max(0,brutto-skogsavdrag);
-      const insattning=narInkF*skShare;      // cash out & sänker årets beskattning
+      const insattning=narInkF*skShare;
       skogskontoSaldo+=insattning;
 
-      const skatteunderlag=Math.max(0,(brutto-skogsavdrag-insattning)-ranta); // ränta avdragsgill
+      const skatteunderlag=Math.max(0,(brutto-skogsavdrag-insattning)-ranta);
       const skatt_ar=skatteunderlag*tax;
 
-      // Valfritt: täck ränta med uttag (brutto) från skogskonto -> skatt på uttag
       let uttag_brutto=0, skatt_uttag=0, uttag_netto=0;
       if(allowWithdraw && ranta>0){
         uttag_brutto=Math.min(ranta,skogskontoSaldo);
@@ -413,25 +441,103 @@ document.addEventListener('DOMContentLoaded', () => {
       forestValue=forestValue + growthValue - harvestValue;
       valueSeries[y]=forestValue;
 
-      table.push({ar:years[y],brutto_avverk:brutto,skogsavdrag,insattning,uttag_brutto,skatt_uttag,uttag_netto,ranta,skatt_ar,kassaflode,dscr:dscr[y],fastighetsvarde:forestValue});
+      cumul += kassaflode;
+      cumCF[y]=cumul;
+      if(cumul < 0 && firstDeficitIndex===null) firstDeficitIndex=y;
+
+      skattArArr[y]=skatt_ar;
+      skattUttagArr[y]=skatt_uttag;
+      skogsavdragArr[y]=skogsavdrag;
+      insattningArr[y]=insattning;
+      saldoArr[y]=skogskontoSaldo;
+
+      table.push({
+        ar:years[y], brutto_avverk:brutto, skogsavdrag, insattning,
+        uttag_brutto, skatt_uttag, uttag_netto, ranta, skatt_ar,
+        kassaflode, dscr:dscr[y], fastighetsvarde:forestValue,
+        skogskonto_saldo:skogskontoSaldo, kumulativt_kassaflode:cumul
+      });
     }
-    return {years,cf,dscr,valueSeries,table};
+
+    const runway = (firstDeficitIndex==null) ? 'Aldrig under 0' : `~${firstDeficitIndex+1} år`;
+    const totals = {
+      skatt_ar_sum: skattArArr.reduce((a,b)=>a+b,0),
+      skatt_uttag_sum: skattUttagArr.reduce((a,b)=>a+b,0),
+      skogsavdrag_used: skogsavdragArr.reduce((a,b)=>a+b,0)
+    };
+
+    return {
+      years, cf, cumCF, dscr, valueSeries, table,
+      tax: { skattArArr, skattUttagArr, skogsavdragArr, insattningArr, saldoArr, totals },
+      runway
+    };
   }
 
   // ---------- Diagram ----------
-  let cfChart, dscrChart, valueChart;
-  function destroyCharts(){ [cfChart,dscrChart,valueChart].forEach(c=>{ if(c) c.destroy(); }); cfChart=dscrChart=valueChart=null; }
+  let cfChart, dscrChart, valueChart, cumCfChart, taxChart;
+  function destroyCharts(){ [cfChart,dscrChart,valueChart,cumCfChart,taxChart].forEach(c=>{ if(c) c.destroy?.(); }); }
+
   function renderCharts(sim){
     destroyCharts();
-    cfChart=new Chart($('cfChart'),{ type:'bar', data:{labels:sim.years,datasets:[{label:'Kassaflöde (SEK)',data:sim.cf}]},
-      options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
+
+    // Kassaflöde (staplad)
+    cfChart = new Chart($('cfChart'),{
+      type:'bar',
+      data:{
+        labels: sim.years,
+        datasets:[
+          {label:'Intäkter (avverkning)', data: sim.table.map(r=>r.brutto_avverk)},
+          {label:'Skatt (år)', data: sim.table.map(r=>-r.skatt_ar), backgroundColor: ctx => (ctx.parsed.y<0? 'rgba(255,99,132,0.6)':undefined)},
+          {label:'Ränta', data: sim.table.map(r=>-r.ranta), backgroundColor: ctx => (ctx.parsed.y<0? 'rgba(255,159,64,0.6)':undefined)},
+          {label:'Insättning skogskonto', data: sim.table.map(r=>-r.insattning), backgroundColor: ctx => (ctx.parsed.y<0? 'rgba(54,162,235,0.6)':undefined)},
+          {label:'Uttag skogskonto (netto)', data: sim.table.map(r=> r.uttag_netto)}
+        ]
+      },
+      options:{
+        responsive:true,
+        scales:{ x:{stacked:true}, y:{stacked:true,ticks:{callback:v=>fmt.format(v)+' kr'}} },
+        plugins:{ tooltip:{ callbacks:{label:ctx=>`${ctx.dataset.label}: ${SEK(ctx.parsed.y)}` } }, legend:{position:'top'} }
+      },
+      plugins:[{ id:'zeroCF', afterDraw(chart){ const y=chart.scales.y.getPixelForValue(0); const {left,right}=chart.scales.x; const c=chart.ctx; c.save(); c.strokeStyle='#7a8580'; c.setLineDash([4,4]); c.beginPath(); c.moveTo(left,y); c.lineTo(right,y); c.stroke(); c.restore(); } }]
+    });
+
+    // DSCR
     dscrChart=new Chart($('dscrChart'),{
       type:'line', data:{labels:sim.years,datasets:[{label:'DSCR',data:sim.dscr,tension:.25}]},
       options:{responsive:true,scales:{y:{min:0,ticks:{callback:v=>fmt2.format(v)}}},plugins:{tooltip:{callbacks:{label:ctx=>fmt2.format(ctx.parsed.y)}}}},
       plugins:[{id:'ref',afterDraw(chart){const y=chart.scales.y.getPixelForValue(1);const ctx=chart.ctx;ctx.save();ctx.strokeStyle='#ff7a7a';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(chart.scales.x.left,y);ctx.lineTo(chart.scales.x.right,y);ctx.stroke();ctx.restore();}}]
     });
-    valueChart=new Chart($('valueChart'),{ type:'line', data:{labels:sim.years,datasets:[{label:'Fastighetsvärde (SEK)',data:sim.valueSeries,tension:.25}]},
+
+    // Värde
+    valueChart=new Chart($('valueChart'),{ type:'line',
+      data:{labels:sim.years,datasets:[{label:'Fastighetsvärde (SEK)',data:sim.valueSeries,tension:.25,fill:true}]},
       options:{responsive:true,scales:{y:{ticks:{callback:v=>fmt.format(v)+' kr'}}},plugins:{tooltip:{callbacks:{label:ctx=>SEK(ctx.parsed.y)}}}} });
+
+    // Kumulativt CF
+    cumCfChart = new Chart($('cumCfChart'),{
+      type:'line',
+      data:{ labels:sim.years, datasets:[{ label:'Kumulativt kassaflöde (SEK)', data:sim.cumCF, fill:true, tension:.25 }] },
+      options:{ responsive:true, scales:{ y:{ ticks:{ callback:v=>fmt.format(v)+' kr' } } }, plugins:{ tooltip:{ callbacks:{ label:ctx=>SEK(ctx.parsed.y) } } } },
+      plugins:[{ id:'zeroLineCum', afterDraw(chart){ const y=chart.scales.y.getPixelForValue(0); const {left,right}=chart.scales.x; const c=chart.ctx; c.save(); c.strokeStyle='#7a8580'; c.setLineDash([4,4]); c.beginPath(); c.moveTo(left,y); c.lineTo(right,y); c.stroke(); c.restore(); } }]
+    });
+
+    // Skatteeffekter
+    taxChart = new Chart($('taxChart'),{
+      type:'bar',
+      data:{ labels:sim.years, datasets:[
+        { label:'Skatt (verksamhet)', data: sim.tax.skattArArr.map(x=>-x) },
+        { label:'Skatt (uttag skogskonto)', data: sim.tax.skattUttagArr.map(x=>-x) },
+        { label:'Skogsavdrag (positiv effekt)', data: sim.tax.skogsavdragArr }
+      ]},
+      options:{ responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, ticks:{callback:v=>fmt.format(v)+' kr'} } },
+        plugins:{ tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${SEK(ctx.parsed.y)}` } }, legend:{position:'top'} } }
+    });
+
+    // Uppdatera tax-pills + runway i konsol
+    $('pillSkattAr').textContent = SEK(sim.tax.totals.skatt_ar_sum);
+    $('pillSkattUttag').textContent = SEK(sim.tax.totals.skatt_uttag_sum);
+    $('pillSkogsavdragUsed').textContent = SEK(sim.tax.totals.skogsavdrag_used);
+    console.log('Runway (kumulativt CF ≥ 0):', sim.runway);
   }
 
   function renderTable(sim){
@@ -449,12 +555,15 @@ document.addEventListener('DOMContentLoaded', () => {
         <td>${SEK(r.kassaflode)}</td>
         <td>${r.dscr==null?'–':fmt2.format(r.dscr)}</td>
         <td>${SEK(r.fastighetsvarde)}</td>
+        <td>${SEK(r.skogskonto_saldo)}</td>
+        <td>${SEK(r.kumulativt_kassaflode)}</td>
       </tr>`).join("");
     yearTableWrap.innerHTML=`<table>
       <thead><tr>
         <th>År</th><th>Brutto avverkning</th><th>Skogsavdrag</th><th>Insättning skogskonto</th>
         <th>Uttag skogskonto (brutto)</th><th>Skatt på uttag</th><th>Uttag skogskonto (netto)</th>
         <th>Ränta</th><th>Skatt i år</th><th>Kassaflöde</th><th>DSCR</th><th>Fastighetsvärde</th>
+        <th>Skogskonto-saldo</th><th>Kumulativt CF</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
   }
 
@@ -521,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
     LAST_TEXT=""; LAST_RESP=null;
     [kpiPrice,kpiHa,kpiVol,kpiVha].forEach(el=>el.textContent="–");
     inpPdf.value=""; btnExportJSON.disabled=true; btnExportCSV.disabled=true; cards.innerHTML=""; yearTableWrap.innerHTML="";
-    if(cfChart) cfChart.destroy(); if(dscrChart) dscrChart.destroy(); if(valueChart) valueChart.destroy();
+    destroyCharts();
   }
 
   // ---------- Bind ----------
@@ -529,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnProcess.addEventListener('click', onProcess);
   btnExportJSON.addEventListener('click', onExportJSON);
   btnExportCSV.addEventListener('click', onExportCSV);
-  btnClear.addEventListener('click', onClear);
+  btnClear?.addEventListener('click', onClear);
 });
 </script>
 </body>
